@@ -1,18 +1,18 @@
 local HttpService = game:GetService("HttpService")
 
-if not isfolder("BolongHub") then
-    makefolder("BolongHub")
+if not isfolder("BazaHub") then
+    makefolder("BazaHub")
 end
-if not isfolder("BolongHub/Config") then
-    makefolder("BolongHub/Config")
+if not isfolder("BazaHub/Config") then
+    makefolder("BazaHub/Config")
 end
 
 local gameName   = tostring(game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name)
 gameName         = gameName:gsub("[^%w_ ]", "")
 gameName         = gameName:gsub("%s+", "_")
 
-local ConfigFile = "BolongHub/Config/" .. gameName .. ".json"
-local ConfigFolder = "BolongHub/Configs"
+local ConfigFile = "BazaHub/Config/" .. gameName .. ".json"
+local ConfigFolder = "BazaHub/Configs"
 local GameConfigFolder = ConfigFolder .. "/" .. gameName
 
 ConfigData       = {}
@@ -137,7 +137,7 @@ function LoadConfigElements()
                 element:Set(ConfigData[key], true)
             end)
             if not ok then
-                warn("[BolongUi] Gagal menerapkan config untuk elemen '" .. tostring(key) .. "': " .. tostring(err))
+                warn("[BazaUI] Gagal menerapkan config untuk elemen '" .. tostring(key) .. "': " .. tostring(err))
             end
         end
     end
@@ -154,7 +154,7 @@ do
     if ok and result then
         Lucide = result
     else
-        warn("[BolongUi] Gagal memuat library resmi Lucide Icons dari " .. lucide_source_url .. " -- " .. tostring(result))
+        warn("[BazaUI] Gagal memuat library resmi Lucide Icons dari " .. lucide_source_url .. " -- " .. tostring(result))
         Lucide = nil
     end
 end
@@ -218,7 +218,7 @@ local function ApplyIcon(imageLabel, name, size)
         imageLabel.ImageRectOffset = asset.ImageRectOffset
         imageLabel.ImageRectSize = asset.ImageRectSize
     else
-        warn("[BolongUi] Ikon Lucide tidak ditemukan atau library gagal dimuat: \"" .. name .. "\"")
+        warn("[BazaUI] Ikon Lucide tidak ditemukan atau library gagal dimuat: \"" .. name .. "\"")
         imageLabel.Image = ""
         imageLabel.ImageRectOffset = Vector2.new(0, 0)
         imageLabel.ImageRectSize = Vector2.new(0, 0)
@@ -227,7 +227,7 @@ end
 
 local discord_logo_asset_id = "rbxassetid://95644421757953"
 
-local WebImageCacheFolder = "BolongHub/ImageCache"
+local WebImageCacheFolder = "BazaHub/ImageCache"
 if not isfolder(WebImageCacheFolder) then
     makefolder(WebImageCacheFolder)
 end
@@ -316,7 +316,7 @@ local function GetWebImageAsset(url)
 
     local getAsset = getcustomasset or getsynasset
     if not (writefile and getAsset and game.HttpGet) then
-        warn("[BolongUi] Executor tidak mendukung getcustomasset/getsynasset, gambar dari url web mungkin tidak tampil.")
+        warn("[BazaUI] Executor tidak mendukung getcustomasset/getsynasset, gambar dari url web mungkin tidak tampil.")
         return ""
     end
 
@@ -355,7 +355,7 @@ local function GetWebImageAsset(url)
         if ok and res and res ~= "" then
             result = res
         else
-            warn("[BolongUi] Gagal memuat gambar dari url: " .. tostring(url) .. " -- " .. tostring(res))
+            warn("[BazaUI] Gagal memuat gambar dari url: " .. tostring(url) .. " -- " .. tostring(res))
         end
     end
 
@@ -543,10 +543,10 @@ function CircleClick(Button, X, Y)
     end)
 end
 
-local Chloex = {}
-function Chloex:MakeNotify(NotifyConfig)
+local Baza = {}
+function Baza:MakeNotify(NotifyConfig)
     local NotifyConfig = NotifyConfig or {}
-    NotifyConfig.Title = NotifyConfig.Title or "BolongHub"
+    NotifyConfig.Title = NotifyConfig.Title or "BazaHub"
     NotifyConfig.Description = NotifyConfig.Description or "Notification"
     NotifyConfig.Content = NotifyConfig.Content or "Content"
     NotifyConfig.Color = NotifyConfig.Color or Color3.fromRGB(235, 235, 235)
@@ -743,8 +743,8 @@ function Chloex:MakeNotify(NotifyConfig)
 end
 
 function than(msg, delay, color, title, desc)
-    return Chloex:MakeNotify({
-        Title = title or "BolongHub",
+    return Baza:MakeNotify({
+        Title = title or "BazaHub",
         Description = desc or "Notification",
         Content = msg or "Content",
         Color = color or Color3.fromRGB(235, 235, 235),
@@ -752,9 +752,9 @@ function than(msg, delay, color, title, desc)
     })
 end
 
-function Chloex:Window(GuiConfig)
+function Baza:Window(GuiConfig)
     GuiConfig              = GuiConfig or {}
-    GuiConfig.Title        = GuiConfig.Title or "BolongHub"
+    GuiConfig.Title        = GuiConfig.Title or "BazaHub"
     GuiConfig.Image        = GuiConfig.Image or "84034353458936"
     GuiConfig.Footer       = GuiConfig.Footer or ""
     GuiConfig.Author       = GuiConfig.Author or ""
@@ -848,7 +848,7 @@ function Chloex:Window(GuiConfig)
 
     function GuiFunc:ExportConfig()
         local payload = HttpService:JSONEncode({
-            Hub = "BolongHub",
+            Hub = "BazaHub",
             Game = gameName,
             PlaceId = game.PlaceId,
             Version = CURRENT_VERSION,
@@ -858,38 +858,38 @@ function Chloex:Window(GuiConfig)
         })
         if setclipboard then
             setclipboard(payload)
-            than("Config copied to clipboard", 4, GuiConfig.Color, "BolongHub", "Export")
+            than("Config copied to clipboard", 4, GuiConfig.Color, "BazaHub", "Export")
         end
         return payload
     end
 
     function GuiFunc:ImportConfig(str)
         if not str or str == "" then
-            than("Paste a config string first", 4, Color3.fromRGB(255, 90, 90), "BolongHub", "Import")
+            than("Paste a config string first", 4, Color3.fromRGB(255, 90, 90), "BazaHub", "Import")
             return false
         end
         local ok, dec = pcall(function() return HttpService:JSONDecode(str) end)
         if not ok or type(dec) ~= "table" then
-            than("Invalid config format", 4, Color3.fromRGB(255, 90, 90), "BolongHub", "Import")
+            than("Invalid config format", 4, Color3.fromRGB(255, 90, 90), "BazaHub", "Import")
             return false
         end
         local data = ExtractConfigPayload(dec)
         if not data then
-            than("Config data is empty", 4, Color3.fromRGB(255, 90, 90), "BolongHub", "Import")
+            than("Config data is empty", 4, Color3.fromRGB(255, 90, 90), "BazaHub", "Import")
             return false
         end
 
         ApplyConfigData(data)
         QueueSaveConfig(AutoSaveEnabled)
-        than("Config imported", 4, GuiConfig.Color, "BolongHub", "Import")
+        than("Config imported", 4, GuiConfig.Color, "BazaHub", "Import")
         return true
     end
 
-    local ConfigFolder = "BolongHub/Configs"
+    local ConfigFolder = "BazaHub/Configs"
     local GameConfigFolder = ConfigFolder .. "/" .. gameName
 
     local function EnsureConfigFolder()
-        if not isfolder("BolongHub") then makefolder("BolongHub") end
+        if not isfolder("BazaHub") then makefolder("BazaHub") end
         if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
         if not isfolder(GameConfigFolder) then makefolder(GameConfigFolder) end
     end
@@ -909,7 +909,7 @@ function Chloex:Window(GuiConfig)
 
     function GuiFunc:SaveConfigAs(name)
         if not name or name == "" then
-            than("Enter a config name first", 4, Color3.fromRGB(255, 90, 90), "BolongHub", "Config")
+            than("Enter a config name first", 4, Color3.fromRGB(255, 90, 90), "BazaHub", "Config")
             return false
         end
         if not writefile then return false end
@@ -919,13 +919,13 @@ function Chloex:Window(GuiConfig)
         local ok, encoded = pcall(function() return HttpService:JSONEncode(GetConfigSnapshot()) end)
         if not ok then
             warn("SaveConfigAs failed to encode config:", encoded)
-            than("Failed to save config", 4, Color3.fromRGB(255, 90, 90), "BolongHub", "Config")
+            than("Failed to save config", 4, Color3.fromRGB(255, 90, 90), "BazaHub", "Config")
             return false
         end
 
         writefile(path, encoded)
         SetActiveConfig(name, path, false, "saved")
-        than("Saved '" .. name .. "'", 4, GuiConfig.Color, "BolongHub", "Config")
+        than("Saved '" .. name .. "'", 4, GuiConfig.Color, "BazaHub", "Config")
         return true
     end
 
@@ -933,23 +933,23 @@ function Chloex:Window(GuiConfig)
         if not name or name == "" then return false end
         local path = GameConfigFolder .. "/" .. name .. ".json"
         if not (isfile and isfile(path)) then
-            than("Config '" .. tostring(name) .. "' not found", 4, Color3.fromRGB(255, 90, 90), "BolongHub", "Config")
+            than("Config '" .. tostring(name) .. "' not found", 4, Color3.fromRGB(255, 90, 90), "BazaHub", "Config")
             return false
         end
         local ok, dec = pcall(function() return HttpService:JSONDecode(readfile(path)) end)
         if not ok or type(dec) ~= "table" then
-            than("Failed to read config", 4, Color3.fromRGB(255, 90, 90), "BolongHub", "Config")
+            than("Failed to read config", 4, Color3.fromRGB(255, 90, 90), "BazaHub", "Config")
             return false
         end
         local data = ExtractConfigPayload(dec)
         if not data then
-            than("Config data is empty", 4, Color3.fromRGB(255, 90, 90), "BolongHub", "Config")
+            than("Config data is empty", 4, Color3.fromRGB(255, 90, 90), "BazaHub", "Config")
             return false
         end
 
         ApplyConfigData(data)
         SetActiveConfig(name, path, false, "manual")
-        than("Loaded '" .. name .. "'", 4, GuiConfig.Color, "BolongHub", "Config")
+        than("Loaded '" .. name .. "'", 4, GuiConfig.Color, "BazaHub", "Config")
         return true
     end
 
@@ -963,7 +963,7 @@ function Chloex:Window(GuiConfig)
             if GuiFunc:GetAutoLoad() == name then
                 GuiFunc:SetAutoLoad("")
             end
-            than("Deleted '" .. name .. "'", 4, Color3.fromRGB(255, 170, 0), "BolongHub", "Config")
+            than("Deleted '" .. name .. "'", 4, Color3.fromRGB(255, 170, 0), "BazaHub", "Config")
             return true
         end
         return false
@@ -1144,7 +1144,7 @@ function Chloex:Window(GuiConfig)
         DiscordBtn.Activated:Connect(function()
             if setclipboard then
                 setclipboard(GuiConfig.Discord)
-                than("Discord invite copied", 4, GuiConfig.Color, "BolongHub", "Community")
+                than("Discord invite copied", 4, GuiConfig.Color, "BazaHub", "Community")
             end
         end)
 
@@ -1616,7 +1616,7 @@ function Chloex:Window(GuiConfig)
         Title.Position = UDim2.new(0, 0, 0, 4)
         Title.BackgroundTransparency = 1
         Title.Font = Enum.Font.GothamBold
-        Title.Text = "BolongHub Window"
+        Title.Text = "BazaHub Window"
         Title.TextSize = 22
         Title.TextColor3 = Color3.fromRGB(255, 255, 255)
         Title.ZIndex = 52
@@ -4014,11 +4014,11 @@ function Chloex:Window(GuiConfig)
                         if initializingAutoToggle then return end
                         if value and selectedConfig then
                             GuiFunc:SetAutoLoad(selectedConfig)
-                            than("Auto load set to '" .. selectedConfig .. "'", 4, GuiConfig.Color, "BolongHub", "Config")
+                            than("Auto load set to '" .. selectedConfig .. "'", 4, GuiConfig.Color, "BazaHub", "Config")
                         elseif value then
                             GuiFunc:SetAutoLoad("")
                             if AutoToggle then AutoToggle:Set(false, true) end
-                            than("Select a config first", 4, Color3.fromRGB(255, 170, 0), "BolongHub", "Config")
+                            than("Select a config first", 4, Color3.fromRGB(255, 170, 0), "BazaHub", "Config")
                         else
                             GuiFunc:SetAutoLoad("")
                         end
@@ -4237,7 +4237,7 @@ function Chloex:Window(GuiConfig)
                             if CardConfig.Link then
                                 if setclipboard then
                                     pcall(setclipboard, CardConfig.Link)
-                                    than("Link copied to clipboard", 4, GuiConfig.Color, "BolongHub", "Widget")
+                                    than("Link copied to clipboard", 4, GuiConfig.Color, "BazaHub", "Widget")
                                 end
                             end
                         end)
@@ -4658,7 +4658,7 @@ function Chloex:Window(GuiConfig)
                     Callback = function()
                         if setclipboard then
                             setclipboard(InfoConfig.DiscordLink)
-                            than("Discord invite copied", 4, GuiConfig.Color, "BolongHub", "Community")
+                            than("Discord invite copied", 4, GuiConfig.Color, "BazaHub", "Community")
                         end
                     end,
                 },
@@ -4712,4 +4712,4 @@ function Chloex:Window(GuiConfig)
     return Tabs
 end
 
-return Chloex
+return Baza
