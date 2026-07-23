@@ -1,6 +1,6 @@
 -- =======================================================
 -- Baza Hub - Violence District
--- Файл: Baza UI/Baza Hub.lua
+-- Файл: Baza UI HUB/Baza Hub.lua
 -- Telegram: https://t.me/BazaScript
 -- =======================================================
 
@@ -21,7 +21,6 @@ local GuiService            = game:GetService("GuiService")
 local Workspace             = game:GetService("Workspace")
 local Lighting              = game:GetService("Lighting")
 local ReplicatedStorage     = game:GetService("ReplicatedStorage")
-local StatsService          = game:GetService("Stats")
 local LocalPlayer           = Players.LocalPlayer
 local Camera                = Workspace.CurrentCamera
 local PlayerGui             = LocalPlayer:WaitForChild("PlayerGui")
@@ -44,11 +43,8 @@ if not TracerGui then
 end
 
 -- Константы
-local AngleLimit30        = math.rad(30)
-local GravityConstant     = Workspace.Gravity
 local DefaultWalkSpeed    = 16
 local isFlag_1            = {["Handle"] = true, ["Accessory"] = true}
-local fakeNamesList       = {"Alex", "Bob", "Charlie", "David", "Eve", "Frank", "Grace", "Hank"}
 
 -- =======================================================
 -- ГЛОБАЛЬНАЯ КОНФИГУРАЦИЯ И СОСТОЯНИЕ ЧИТА
@@ -231,10 +227,19 @@ local function GetAttributeOrValue(obj, name)
     return nil
 end
 
+local validPartNames = {
+    "HumanoidRootPart", "Head", "Torso", "UpperTorso", "LowerTorso",
+    "LeftArm", "RightArm", "LeftLeg", "RightLeg",
+    "Left UpperArm", "Left LowerArm", "Left Hand",
+    "Right UpperArm", "Right LowerArm", "Right Hand",
+    "Left UpperLeg", "Left LowerLeg", "Left Foot",
+    "Right UpperLeg", "Right LowerLeg", "Right Foot"
+}
+
 local function GetCharacterParts(character)
     local parts = {}
     for _, child in ipairs(character:GetDescendants()) do
-        if child:IsA("BasePart") and not isFlag_1[child.Name] then
+        if child:IsA("BasePart") and not isFlag_1[child.Name] and table.find(validPartNames, child.Name) then
             table.insert(parts, child)
         end
     end
@@ -242,7 +247,7 @@ local function GetCharacterParts(character)
 end
 
 -- =======================================================
--- 100% РАБОЧАЯ ЛОГИКА GOD MODE (ИЗ BOLONG HUB)
+-- 100% РАБОЧАЯ ЛОГИКА GOD MODE (С ПРОВЕРКОЙ ПЕРСОНАЖА)
 -- =======================================================
 local function EnableGodMode()
     CheatState.godEnabled = true
@@ -277,7 +282,7 @@ end
 local function ProcessGodMode()
     if not CheatState.godEnabled then return end
     local char = LocalPlayer.Character
-    if not char then return end
+    if not char or not char.Parent then return end
     local hum = char:FindFirstChildOfClass("Humanoid")
     if not hum then return end
 
@@ -439,6 +444,11 @@ end
 
 function Hub.ClearAutoParryEsp()
     if AutoParryState.EspFolder then pcall(function() AutoParryState.EspFolder:Destroy() end) AutoParryState.EspFolder = nil end
+    for _, folder in ipairs(Workspace:GetChildren()) do
+        if folder.Name == "AutoParryRadiusESP" then
+            pcall(function() folder:Destroy() end)
+        end
+    end
     AutoParryState.EspPart = nil
 end
 
@@ -491,6 +501,10 @@ task.spawn(function()
             local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
             if root and AutoParryState.EspPart and AutoParryState.EspPart.Parent then
                 AutoParryState.EspPart.CFrame = CFrame.new(root.Position)
+            end
+        else
+            if Workspace:FindFirstChild("AutoParryRadiusESP") or AutoParryState.EspPart ~= nil then
+                Hub.ClearAutoParryEsp()
             end
         end
     end
@@ -705,6 +719,21 @@ UserInputService.InputBegan:Connect(function(input, gpe)
     end
 end)
 
+UserInputService:GetPropertyChangedSignal("MouseBehavior"):Connect(function()
+    if Config.forceCursorEnabled then ForceCursorProperties() end
+end)
+UserInputService:GetPropertyChangedSignal("MouseIconEnabled"):Connect(function()
+    if Config.forceCursorEnabled then ForceCursorProperties() end
+end)
+
+RunService.RenderStepped:Connect(function()
+    if Config.forceCursorEnabled then
+        if UserInputService.MouseBehavior ~= Enum.MouseBehavior.Default then
+            ForceCursorProperties()
+        end
+    end
+end)
+
 -- =======================================================
 -- SKIP END SCREEN (BYPASS MATCH END CUTSCENE)
 -- =======================================================
@@ -714,8 +743,13 @@ local function EnableSkipEndScreen()
         if remotes then
             for _, name in ipairs({"cutscene", "cutsceneEnd", "endscreencutscene"}) do
                 local r = remotes:FindFirstChild(name)
-                if r and r:IsA("RemoteEvent") then
-                    for _, conn in ipairs(getconnections(r.OnClientEvent)) do conn:Disable() conn:Disconnect() end
+                if r and r:IsA("RemoteEvent") and type(getconnections) == "function" then
+                    pcall(function()
+                        for _, conn in ipairs(getconnections(r.OnClientEvent)) do
+                            pcall(function() conn:Disable() end)
+                            pcall(function() conn:Disconnect() end)
+                        end
+                    end)
                 end
             end
         end
@@ -855,7 +889,7 @@ end
 
 local function UpdatePlayerEsp()
     for player, espObj in pairs(CheatState.espObjects) do
-        if espObj and espObj.billboard and espObj.billboard.Parent then
+        if espObj and typeof(espObj) == "table" and espObj.billboard and espObj.billboard.Parent then
             local role = GetPlayerRole(player)
             local isKiller = (role == "killer")
             local enabled = isKiller and Config.espKiller or Config.espSurvivors
@@ -864,7 +898,7 @@ local function UpdatePlayerEsp()
         end
     end
     for player, hl in pairs(CheatState.outlineObjects) do
-        if hl and hl.Parent and player.Character then UpdateOutline(player, player.Character) end
+        if hl and hl.Parent and player and player.Parent and player.Character then UpdateOutline(player, player.Character) end
     end
 end
 
@@ -1238,7 +1272,7 @@ end
 -- =======================================================
 -- AUTO GENERATOR SKILLCHECK
 -- =======================================================
-local nilValue_1 = nil
+local cachedActionButton = nil
 local function GetSkillCheckObjects()
     for _, guiName in ipairs({"SkillCheckPromptGui", "SkillCheckPromptGui-con"}) do
         local gui = PlayerGui:FindFirstChild(guiName, true)
@@ -1253,25 +1287,39 @@ local function GetSkillCheckObjects()
 end
 
 local function GetActionButton()
-    if nilValue_1 and nilValue_1.Parent then return nilValue_1 end
+    if cachedActionButton and cachedActionButton.Parent and cachedActionButton:IsA("GuiButton") then return cachedActionButton end
+    cachedActionButton = nil
     local survivorMob = PlayerGui:FindFirstChild("Survivor-mob", true)
     if not survivorMob then return nil end
     local controls = survivorMob:FindFirstChild("Controls", true)
     if not controls then return nil end
     local action = controls:FindFirstChild("action") or controls:FindFirstChild("Gui-mob")
-    if action and action:IsA("GuiButton") then nilValue_1 = action return action end
+    if action and action:IsA("GuiButton") then cachedActionButton = action return action end
     return nil
 end
 
 local function TriggerSkillCheckHit()
     local button = GetActionButton()
-    if button and type(firesignal) == "function" then
-        firesignal(button.MouseButton1Down)
-        task.delay(0.05, function()
-            if button and button.Parent then
-                firesignal(button.MouseButton1Up)
-                firesignal(button.MouseButton1Click)
-            end
+    if button then
+        if type(firesignal) == "function" then
+            local success = pcall(function()
+                firesignal(button.MouseButton1Down)
+                task.delay(0.05, function()
+                    if button and button.Parent then
+                        firesignal(button.MouseButton1Up)
+                        firesignal(button.MouseButton1Click)
+                    end
+                end)
+            end)
+            if success then return end
+        end
+        pcall(function()
+            local x = button.AbsolutePosition.X + button.AbsoluteSize.X / 2
+            local y = button.AbsolutePosition.Y + button.AbsoluteSize.Y / 2
+            VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
+            task.delay(0.05, function()
+                VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
+            end)
         end)
         return
     end
@@ -1394,7 +1442,7 @@ ParrySection:AddToggle({
     Save = true,
     Callback = function(val)
         CheatState.autoParryRadiusEsp = val
-        if val then Hub.EnableAutoParryEsp() else Hub.DisableAutoParryEsp() end
+        if val then Hub.DrawAutoParryEsp() else Hub.ClearAutoParryEsp() end
     end
 })
 
@@ -1465,6 +1513,14 @@ CombatSection:AddSlider({
     end
 })
 
+CombatSection:AddToggle({
+    Title = "Auto Hit (Reach)",
+    Content = "Automatically attacks nearby survivors in range",
+    Default = false,
+    Save = true,
+    Callback = function(val) Config.autoHit = val end
+})
+
 -- =======================================================
 -- 3. Вкладка: Visuals (ESP)
 -- =======================================================
@@ -1515,48 +1571,131 @@ PlayerEspSec:AddColorPicker({
     end
 })
 
-local MapEspSec = VisualsTab:AddSection("Map Objects ESP", false)
-MapEspSec:AddToggle({
-    Title = "ESP Generators",
-    Content = "Highlight generators on map",
+local HitboxEspSec = VisualsTab:AddSection("Hitbox ESP", false)
+HitboxEspSec:AddToggle({
+    Title = "Enable Hitbox ESP",
+    Content = "Show 3D bounding box around player hitboxes",
     Default = false,
     Save = true,
+    Callback = function(val)
+        Config.hitboxEspEnabled = val
+        if not val then
+            for player in pairs(CheatState.hitboxEspObjects) do
+                RemoveHitboxEsp(player)
+            end
+        end
+    end
+})
+
+HitboxEspSec:AddColorPicker({
+    Title = "Survivor Hitbox Color",
+    Content = "Select bounding box color for survivors",
+    Default = Color3.fromRGB(0, 255, 120),
+    Save = true,
+    Callback = function(col)
+        Config.hitboxEspSurvivorColor = col
+    end
+})
+
+HitboxEspSec:AddColorPicker({
+    Title = "Killer Hitbox Color",
+    Content = "Select bounding box color for killer",
+    Default = Color3.fromRGB(255, 60, 60),
+    Save = true,
+    Callback = function(col)
+        Config.hitboxEspKillerColor = col
+    end
+})
+
+local MapEspSec = VisualsTab:AddSection("Map Objects ESP", false)
+
+local genStack = MapEspSec:AddHStack()
+genStack:AddToggle({
+    Title = "ESP Generator",
+    Default = Config.espGeneratorEnabled,
     Callback = function(val)
         Config.espGeneratorEnabled = val
         UpdateMapEsp()
     end
 })
+genStack:AddColorPicker({
+    Title = "Generator Color",
+    Default = Config.espGeneratorColor,
+    Callback = function(col)
+        Config.espGeneratorColor = col
+        if Config.espGeneratorEnabled then UpdateMapEsp() end
+    end
+})
 
 MapEspSec:AddToggle({
-    Title = "ESP Pallets",
-    Content = "Highlight valid map pallets",
-    Default = false,
+    Title = "Generator Progress %",
+    Content = "Show repair percentage on generator Billboard",
+    Default = true,
     Save = true,
+    Callback = function(val)
+        Config.espGeneratorProgressGen = val
+        for _, gen in ipairs(CheatState.cachedMapObjects.Generators) do
+            if gen and gen.Parent then
+                gen:SetAttribute("BazaGenLastPct", nil)
+                local bb = gen:FindFirstChild("BazaGenProgress")
+                if bb then bb:Destroy() end
+            end
+        end
+        if Config.espGeneratorEnabled then UpdateMapEsp() end
+    end
+})
+
+local palletStack = MapEspSec:AddHStack()
+palletStack:AddToggle({
+    Title = "ESP Pallet",
+    Default = Config.espPalletEnabled,
     Callback = function(val)
         Config.espPalletEnabled = val
         UpdateMapEsp()
     end
 })
+palletStack:AddColorPicker({
+    Title = "Pallet Color",
+    Default = Config.espPalletColor,
+    Callback = function(col)
+        Config.espPalletColor = col
+        if Config.espPalletEnabled then UpdateMapEsp() end
+    end
+})
 
-MapEspSec:AddToggle({
-    Title = "ESP Hooks",
-    Content = "Highlight meat hooks",
-    Default = false,
-    Save = true,
+local hookStack = MapEspSec:AddHStack()
+hookStack:AddToggle({
+    Title = "ESP Hook",
+    Default = Config.espHookEnabled,
     Callback = function(val)
         Config.espHookEnabled = val
         UpdateMapEsp()
     end
 })
+hookStack:AddColorPicker({
+    Title = "Hook Color",
+    Default = Config.espHookColor,
+    Callback = function(col)
+        Config.espHookColor = col
+        if Config.espHookEnabled then UpdateMapEsp() end
+    end
+})
 
-MapEspSec:AddToggle({
-    Title = "ESP Gates",
-    Content = "Highlight exit gates",
-    Default = false,
-    Save = true,
+local gateStack = MapEspSec:AddHStack()
+gateStack:AddToggle({
+    Title = "ESP Gate",
+    Default = Config.espGateEnabled,
     Callback = function(val)
         Config.espGateEnabled = val
         UpdateMapEsp()
+    end
+})
+gateStack:AddColorPicker({
+    Title = "Gate Color",
+    Default = Config.espGateColor,
+    Callback = function(col)
+        Config.espGateColor = col
+        if Config.espGateEnabled then UpdateMapEsp() end
     end
 })
 
@@ -1733,6 +1872,8 @@ Players.PlayerRemoving:Connect(function(player)
     RemovePlayerEsp(player)
     RemoveHitboxEsp(player)
     if player.Character then ResetPlayerHitbox(player, player.Character) end
+    CheatState.playerRoles[player] = nil
+    CheatState.playerTeamConns[player] = nil
 end)
 
 LocalPlayer.CharacterAdded:Connect(function(char)
@@ -1752,7 +1893,7 @@ RunService.Stepped:Connect(function()
     local char = LocalPlayer.Character
     if not char then return end
 
-    if Config.fovToggle or Config.lockFovEnabled then Camera.FieldOfView = Config.customFovValue end
+    if Config.lockFovEnabled then Camera.FieldOfView = Config.customFovValue end
     HandleAutoGenerators()
 end)
 
