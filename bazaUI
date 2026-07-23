@@ -201,6 +201,21 @@ local function ApplyIcon(imageLabel, name, size)
         return
     end
 
+    if type(name) == "string" then
+        local lname = name:lower()
+        if lname == "telegram" then
+            imageLabel.Image = "rbxassetid://11684074004"
+            imageLabel.ImageRectOffset = Vector2.new(0, 0)
+            imageLabel.ImageRectSize = Vector2.new(0, 0)
+            return
+        elseif lname == "discord" then
+            imageLabel.Image = "rbxassetid://95644421757953"
+            imageLabel.ImageRectOffset = Vector2.new(0, 0)
+            imageLabel.ImageRectSize = Vector2.new(0, 0)
+            return
+        end
+    end
+
     if name:match("^rbxassetid://") or name:match("^rbxthumb://") or name:match("^https?://") or name:match("^%d+$") then
         local finalImage = name
         if name:match("^%d+$") then
@@ -1092,9 +1107,10 @@ function Baza:Window(GuiConfig)
 
     UICorner1.Parent = Top
 
+    local socialLink = GuiConfig.Telegram or GuiConfig.Discord or GuiConfig.SocialLink
     local discordOffset = 0
     local DiscordButtonRef = nil
-    if GuiConfig.Discord and GuiConfig.Discord ~= "" then
+    if socialLink and socialLink ~= "" then
         local baseX = TextLabel.TextBounds.X + 18
 
         local Divider = Instance.new("Frame")
@@ -1104,52 +1120,69 @@ function Baza:Window(GuiConfig)
         Divider.AnchorPoint = Vector2.new(0, 0.5)
         Divider.Position = UDim2.new(0, baseX, 0, HeaderRow1Y)
         Divider.Size = UDim2.new(0, 1, 0, 16)
-        Divider.Name = "DiscordDivider"
+        Divider.Name = "SocialDivider"
         Divider.Parent = Top
 
         local DividerCorner = Instance.new("UICorner")
         DividerCorner.CornerRadius = UDim.new(1, 0)
         DividerCorner.Parent = Divider
 
-        local DiscordImg = Instance.new("ImageLabel")
-        DiscordImg.Image = discord_logo_asset_id
-        DiscordImg.ImageColor3 = Color3.fromRGB(88, 101, 242)
-        DiscordImg.BackgroundTransparency = 1
-        DiscordImg.ScaleType = Enum.ScaleType.Fit
-        DiscordImg.AnchorPoint = Vector2.new(0, 0.5)
-        DiscordImg.Position = UDim2.new(0, baseX + 10, 0, HeaderRow1Y)
-        DiscordImg.Size = UDim2.new(0, 16, 0, 16)
-        DiscordImg.Name = "DiscordImg"
-        DiscordImg.Parent = Top
+        local isTelegram = (GuiConfig.Telegram ~= nil)
+            or (string.find(string.lower(socialLink), "t.me") ~= nil)
+            or (string.find(string.lower(socialLink), "telegram") ~= nil)
+            or (GuiConfig.SocialIcon == "telegram")
 
-        local DiscordBtn = Instance.new("TextButton")
-        DiscordBtn.Text = ""
-        DiscordBtn.AutoButtonColor = false
-        DiscordBtn.BackgroundTransparency = 1
-        DiscordBtn.BorderSizePixel = 0
-        DiscordBtn.AnchorPoint = Vector2.new(0, 0.5)
-        DiscordBtn.Position = UDim2.new(0, baseX + 8, 0, HeaderRow1Y)
-        DiscordBtn.Size = UDim2.new(0, 0, 0, 16)
-        DiscordBtn.Name = "DiscordBtn"
-        DiscordBtn.Parent = Top
+        local SocialImg = Instance.new("ImageLabel")
+        SocialImg.BackgroundTransparency = 1
+        SocialImg.ScaleType = Enum.ScaleType.Fit
+        SocialImg.AnchorPoint = Vector2.new(0, 0.5)
+        SocialImg.Position = UDim2.new(0, baseX + 10, 0, HeaderRow1Y)
+        SocialImg.Size = UDim2.new(0, 16, 0, 16)
+        SocialImg.Name = "SocialImg"
+        SocialImg.Parent = Top
 
-        DiscordBtn.MouseEnter:Connect(function()
-            TweenService:Create(DiscordImg, TweenInfo.new(0.2), { ImageColor3 = Color3.fromRGB(120, 132, 255) }):Play()
+        local defaultColor, hoverColor, linkTypeName
+        if isTelegram then
+            defaultColor = Color3.fromRGB(40, 168, 234)
+            hoverColor = Color3.fromRGB(80, 195, 255)
+            linkTypeName = "Telegram"
+            ApplyIcon(SocialImg, GuiConfig.SocialIcon or "telegram", 24)
+        else
+            defaultColor = Color3.fromRGB(88, 101, 242)
+            hoverColor = Color3.fromRGB(120, 132, 255)
+            linkTypeName = "Discord"
+            ApplyIcon(SocialImg, GuiConfig.SocialIcon or "discord", 24)
+        end
+        SocialImg.ImageColor3 = defaultColor
+
+        local SocialBtn = Instance.new("TextButton")
+        SocialBtn.Text = ""
+        SocialBtn.AutoButtonColor = false
+        SocialBtn.BackgroundTransparency = 1
+        SocialBtn.BorderSizePixel = 0
+        SocialBtn.AnchorPoint = Vector2.new(0, 0.5)
+        SocialBtn.Position = UDim2.new(0, baseX + 8, 0, HeaderRow1Y)
+        SocialBtn.Size = UDim2.new(0, 20, 0, 16)
+        SocialBtn.Name = "SocialBtn"
+        SocialBtn.Parent = Top
+
+        SocialBtn.MouseEnter:Connect(function()
+            TweenService:Create(SocialImg, TweenInfo.new(0.2), { ImageColor3 = hoverColor }):Play()
             TweenService:Create(Divider, TweenInfo.new(0.2), { BackgroundTransparency = 0.5 }):Play()
         end)
-        DiscordBtn.MouseLeave:Connect(function()
-            TweenService:Create(DiscordImg, TweenInfo.new(0.2), { ImageColor3 = Color3.fromRGB(88, 101, 242) }):Play()
+        SocialBtn.MouseLeave:Connect(function()
+            TweenService:Create(SocialImg, TweenInfo.new(0.2), { ImageColor3 = defaultColor }):Play()
             TweenService:Create(Divider, TweenInfo.new(0.2), { BackgroundTransparency = 0.75 }):Play()
         end)
-        DiscordBtn.Activated:Connect(function()
+        SocialBtn.Activated:Connect(function()
             if setclipboard then
-                setclipboard(GuiConfig.Discord)
-                than("Discord invite copied", 4, GuiConfig.Color, "BazaHub", "Community")
+                setclipboard(socialLink)
+                GuiFunc:MakeNotify({ Title = "BazaHub", Description = "Community", Content = linkTypeName .. " link copied", Color = GuiConfig.Color, Delay = 4 })
             end
         end)
 
         discordOffset = 36
-        DiscordButtonRef = DiscordBtn
+        DiscordButtonRef = SocialBtn
     end
 
     local authorOffset = 0
@@ -2204,35 +2237,6 @@ function Baza:Window(GuiConfig)
             end
 
             if AlwaysOpen == true then
-                SectionButton:Destroy()
-                FeatureFrame:Destroy()
-                OpenSection = true
-                UpdateSizeSection()
-            elseif AlwaysOpen == false then
-                OpenSection = true
-                UpdateSizeSection()
-            else
-                OpenSection = false
-            end
-
-            if AlwaysOpen ~= true then
-                SectionButton.Activated:Connect(function()
-                    CircleClick(SectionButton, Mouse.X, Mouse.Y)
-                    if OpenSection then
-                        TweenService:Create(FeatureFrame, TweenInfo.new(0.5), { Rotation = 0 }):Play()
-                        TweenService:Create(Section, TweenInfo.new(0.5), { Size = UDim2.new(1, 1, 0, 30) }):Play()
-                        TweenService:Create(SectionDecideFrame, TweenInfo.new(0.5), { Size = UDim2.new(0, 0, 0, 2) })
-                            :Play()
-                        OpenSection = false
-                        task.delay(0.5, UpdateSizeScroll)
-                    else
-                        OpenSection = true
-                        UpdateSizeSection()
-                    end
-                end)
-            end
-
-            if AlwaysOpen == true or AlwaysOpen == false then
                 OpenSection = true
                 local SectionSizeYWitdh = 38
                 for _, v in SectionAdd:GetChildren() do
@@ -2244,8 +2248,27 @@ function Baza:Window(GuiConfig)
                 Section.Size = UDim2.new(1, 1, 0, SectionSizeYWitdh)
                 SectionAdd.Size = UDim2.new(1, 0, 0, SectionSizeYWitdh - 38)
                 SectionDecideFrame.Size = UDim2.new(1, 0, 0, 2)
-                UpdateSizeScroll()
+            else
+                OpenSection = false
+                FeatureFrame.Rotation = 0
+                Section.Size = UDim2.new(1, 1, 0, 30)
+                SectionAdd.Size = UDim2.new(1, 0, 0, 0)
+                SectionDecideFrame.Size = UDim2.new(0, 0, 0, 2)
             end
+
+            SectionButton.Activated:Connect(function()
+                CircleClick(SectionButton, Mouse.X, Mouse.Y)
+                if OpenSection then
+                    TweenService:Create(FeatureFrame, TweenInfo.new(0.5), { Rotation = 0 }):Play()
+                    TweenService:Create(Section, TweenInfo.new(0.5), { Size = UDim2.new(1, 1, 0, 30) }):Play()
+                    TweenService:Create(SectionDecideFrame, TweenInfo.new(0.5), { Size = UDim2.new(0, 0, 0, 2) }):Play()
+                    OpenSection = false
+                    task.delay(0.5, UpdateSizeScroll)
+                else
+                    OpenSection = true
+                    UpdateSizeSection()
+                end
+            end)
 
             SectionAdd.ChildAdded:Connect(UpdateSizeSection)
             SectionAdd.ChildRemoved:Connect(UpdateSizeSection)
@@ -4642,23 +4665,41 @@ function Baza:Window(GuiConfig)
         })
     end
 
-    if InfoConfig.DiscordLink then
-        local fullDescription = InfoConfig.DiscordText or "Support, updates and announcements."
+    local socialLink = InfoConfig.TelegramLink or InfoConfig.DiscordLink or InfoConfig.SocialLink
+    if socialLink then
+        local fullDescription = InfoConfig.TelegramText or InfoConfig.DiscordText or InfoConfig.SocialText or "Support, updates and announcements."
         if InfoConfig.DiscordDesc and InfoConfig.DiscordDesc ~= "" then
             fullDescription = fullDescription .. "\n" .. InfoConfig.DiscordDesc
+        elseif InfoConfig.SocialDesc and InfoConfig.SocialDesc ~= "" then
+            fullDescription = fullDescription .. "\n" .. InfoConfig.SocialDesc
         end
         
+        local isTelegram = (InfoConfig.TelegramLink ~= nil)
+            or (string.find(string.lower(socialLink), "t.me") ~= nil)
+            or (string.find(string.lower(socialLink), "telegram") ~= nil)
+            or (InfoConfig.DiscordName == "Telegram")
+            or (InfoConfig.TelegramName ~= nil)
+
+        local logo = InfoConfig.Logo
+        if not logo or logo == "" then
+            logo = isTelegram and "telegram" or "discord"
+        end
+
+        local defaultTitle = isTelegram and "Telegram" or "Community"
+        local title = InfoConfig.TelegramName or InfoConfig.DiscordName or InfoConfig.SocialName or defaultTitle
+        local btnText = InfoConfig.ButtonText or (isTelegram and "Скопировать ссылку" or "Copy Invite")
+
         Items:AddCard({
-            Title = InfoConfig.DiscordName or "Community",
+            Title = title,
             Description = fullDescription,
-            Logo = discord_logo_asset_id,
+            Logo = logo,
             Buttons = {
                 {
-                    Name = "Copy Invite",
+                    Name = btnText,
                     Callback = function()
                         if setclipboard then
-                            setclipboard(InfoConfig.DiscordLink)
-                            than("Discord invite copied", 4, GuiConfig.Color, "BazaHub", "Community")
+                            setclipboard(socialLink)
+                            GuiFunc:MakeNotify({ Title = "BazaHub", Description = "Community", Content = title .. " link copied", Color = GuiConfig.Color, Delay = 4 })
                         end
                     end,
                 },
