@@ -1,0 +1,1771 @@
+-- =======================================================
+-- Baza Hub - Violence District
+-- Файл: Baza UI/Baza Hub.lua
+-- Telegram: https://t.me/BazaScript
+-- =======================================================
+
+local function LoadBazaUI()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/vasul111/scripts/main/bazaUI"))()
+end
+
+local BazaUI = LoadBazaUI()
+
+-- =======================================================
+-- Инициализация Roblox сервисов
+-- =======================================================
+local Players               = game:GetService("Players")
+local RunService            = game:GetService("RunService")
+local UserInputService      = game:GetService("UserInputService")
+local VirtualInputManager   = game:GetService("VirtualInputManager")
+local GuiService            = game:GetService("GuiService")
+local Workspace             = game:GetService("Workspace")
+local Lighting              = game:GetService("Lighting")
+local ReplicatedStorage     = game:GetService("ReplicatedStorage")
+local StatsService          = game:GetService("Stats")
+local LocalPlayer           = Players.LocalPlayer
+local Camera                = Workspace.CurrentCamera
+local PlayerGui             = LocalPlayer:WaitForChild("PlayerGui")
+
+-- Папка хранения ESP элементов
+local EspFolder = Workspace:FindFirstChild("BazaESP")
+if not EspFolder then
+    EspFolder = Instance.new("Folder")
+    EspFolder.Name = "BazaESP"
+    EspFolder.Parent = Workspace
+end
+
+-- Папка хранения Трассеров
+local TracerGui = PlayerGui:FindFirstChild("BazaTracers")
+if not TracerGui then
+    TracerGui = Instance.new("ScreenGui")
+    TracerGui.Name = "BazaTracers"
+    TracerGui.ResetOnSpawn = false
+    TracerGui.Parent = PlayerGui
+end
+
+-- Константы
+local AngleLimit30        = math.rad(30)
+local GravityConstant     = Workspace.Gravity
+local DefaultWalkSpeed    = 16
+local isFlag_1            = {["Handle"] = true, ["Accessory"] = true}
+local fakeNamesList       = {"Alex", "Bob", "Charlie", "David", "Eve", "Frank", "Grace", "Hank"}
+
+-- =======================================================
+-- ГЛОБАЛЬНАЯ КОНФИГУРАЦИЯ И СОСТОЯНИЕ ЧИТА
+-- =======================================================
+local Config = {
+    -- Выжившие (Survivors)
+    autoGenerator           = true,
+    autoGeneratorMode       = "Instant", -- "Instant", "Perfect", "Normal"
+    autoOpenGate            = false,
+
+    -- Silent Aim (Twist of Fate)
+    silentAimEnabled        = false,
+    silentAimFovRadius      = 150,
+
+    -- Убийцы (Killers)
+    hitboxEnabled           = false,
+    survivorHitboxSize      = 100,
+    killerHitboxSize        = 100,
+    autoHit                 = false,
+
+    -- Camera Veil (Авто-прицел копья)
+    cameraVeilEnabled       = false,
+    cameraVeilAutoRelease   = true,
+    cameraVeilSnapLine      = false,
+    cameraVeilMaxDistance   = 175,
+    cameraVeilSmoothness    = 1,
+    cameraVeilSpearSpeed    = 220,
+
+    -- ESP Игроков
+    espSurvivors            = true,
+    survivorShowName        = false,
+    survivorShowOutline     = true,
+    survivorOutlineOnly     = true,
+    survivorColor           = Color3.fromRGB(60, 200, 255),
+
+    espKiller               = true,
+    killerShowName          = false,
+    killerShowOutline       = true,
+    killerOutlineOnly       = true,
+    killerColor             = Color3.fromRGB(255, 60, 60),
+
+    espDistance             = true,
+    espTracers              = false,
+    maxDistance             = 500,
+    fillTransparency        = 0.6,
+
+    -- Hitbox ESP
+    hitboxEspEnabled        = false,
+    hitboxEspSurvivorColor  = Color3.fromRGB(0, 255, 120),
+    hitboxEspKillerColor    = Color3.fromRGB(255, 60, 60),
+    hitboxEspTransparency   = 0.5,
+    hitboxEspOutlineOnly    = false,
+
+    -- ESP Объектов карты
+    espGeneratorEnabled     = false,
+    espGeneratorProgressGen = true,
+    espGeneratorColor       = Color3.fromRGB(200, 100, 0),
+    espPalletEnabled        = false,
+    espPalletColor          = Color3.fromRGB(53, 189, 166),
+    espHookEnabled          = false,
+    espHookColor            = Color3.fromRGB(252, 116, 116),
+    espGateEnabled          = false,
+    espGateColor            = Color3.fromRGB(255, 255, 255),
+
+    -- Предупреждение о ближнем убийце
+    warnEnabled             = false,
+    warnDist1               = 60,
+    warnDist2               = 40,
+    warnDist3               = 20,
+
+    -- Движение (Movement)
+    antiFallSlow            = false,
+    noSlowdown              = false,
+    speedBoost              = false,
+    boostPercent            = 50,
+
+    -- Камера и освещение
+    lockFovEnabled          = false,
+    customFovValue          = 70,
+    fullbrightEnabled       = false,
+    removeVfxEnabled        = false,
+
+    -- Cursor & Skip End Screen
+    forceCursorEnabled      = false,
+    forceCursorKeybind      = "G",
+    skipEndScreenEnabled    = false,
+
+    -- Crosshair
+    crosshairEnabled        = false,
+    crosshairStyle          = "Plus",
+    crosshairSize           = 50,
+    crosshairOpacity        = 1,
+    crosshairColor          = Color3.fromRGB(255, 255, 255),
+    crosshairPosX           = 0.5,
+    crosshairPosY           = 0.5,
+}
+
+local CheatState = {
+    espObjects           = {},
+    outlineObjects       = {},
+    playerRoles          = {},
+    playerTeamConns      = {},
+    cachedMapObjects     = {Generators = {}, Pallets = {}, Hooks = {}, Gates = {}},
+    cachedPalletMeta     = {},
+    cachedHookMeshParts = {},
+    completedGenerators = {},
+    objEspInitialized    = false,
+
+    hitboxOriginalSizes  = {},
+    hitboxEspObjects     = {},
+
+    -- Camera Veil
+    CV_Enabled           = false,
+    CV_CurrentTarget     = nil,
+    CV_WasHolding        = false,
+    CV_HoldingPC         = false,
+    CV_HoldingMobile     = false,
+    CV_frameCount        = 0,
+    CV_spearModeFrame    = -99,
+    CV_cachedSpearMode   = false,
+    CV_SnapLineFrame     = nil,
+
+    -- Silent Aim
+    silentAimTarget      = nil,
+    silentAimLookVector  = nil,
+
+    -- God Mode
+    godEnabled           = false,
+    godLastHP            = nil,
+
+    -- Ghost Gate
+    ghostGateEnabled     = false,
+    ghostGateBackups     = {},
+
+    -- Auto Parry
+    autoParryEnabled     = false,
+    autoParryRadiusEsp   = false,
+    autoParryRadius      = 12,
+
+    -- Crosshair & Cursor
+    crosshairGui         = nil,
+    cursorBackupIcon     = nil,
+    cursorBackupBehavior = nil,
+
+    -- Lock FOV & Lighting
+    originalFOV          = nil,
+    originalLighting     = {},
+    postEffectBackups    = {},
+
+    -- Skip End Screen
+    skipEndScreenConns   = {},
+
+    -- Предупреждения
+    lastWarnLevel        = 0,
+    lastAutoActionTime   = 0,
+}
+
+local Hub = {}
+
+-- =======================================================
+-- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ И ОПРЕДЕЛЕНИЕ РОЛЕЙ
+-- =======================================================
+local function GetPlayerRole(player)
+    return CheatState.playerRoles[player] or "survivor"
+end
+
+local function UpdatePlayerRole(player)
+    local success, teamName = pcall(function()
+        return player.Team and player.Team.Name:lower() or ""
+    end)
+    CheatState.playerRoles[player] = (success and teamName:find("killer")) and "killer" or "survivor"
+end
+
+local function GetAttributeOrValue(obj, name)
+    if typeof(obj) ~= "Instance" then return nil end
+    local attr = obj:GetAttribute(name)
+    if attr ~= nil then return attr end
+    local child = obj:FindFirstChild(name)
+    if child and child:IsA("ValueBase") then return child.Value end
+    return nil
+end
+
+local function GetCharacterParts(character)
+    local parts = {}
+    for _, child in ipairs(character:GetDescendants()) do
+        if child:IsA("BasePart") and not isFlag_1[child.Name] then
+            table.insert(parts, child)
+        end
+    end
+    return parts
+end
+
+-- =======================================================
+-- 100% РАБОЧАЯ ЛОГИКА GOD MODE (ИЗ BOLONG HUB)
+-- =======================================================
+local function EnableGodMode()
+    CheatState.godEnabled = true
+    CheatState.godLastHP = nil
+    pcall(function()
+        local char = LocalPlayer.Character
+        if char then
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum then
+                hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+                hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+                hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+            end
+        end
+    end)
+end
+
+local function DisableGodMode()
+    CheatState.godEnabled = false
+    CheatState.godLastHP = nil
+    pcall(function()
+        local char = LocalPlayer.Character
+        if not char then return end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hum then return end
+        hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
+        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+        hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+    end)
+end
+
+local function ProcessGodMode()
+    if not CheatState.godEnabled then return end
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+
+    local maxHP = hum.MaxHealth
+    local currentHP = hum.Health
+
+    if CheatState.godLastHP ~= nil and currentHP < CheatState.godLastHP and currentHP > 0 then
+        pcall(function() hum.Health = maxHP end)
+    end
+    CheatState.godLastHP = hum.Health
+
+    pcall(function()
+        local state = hum:GetState()
+        if state == Enum.HumanoidStateType.Dead then
+            hum.Health = maxHP
+            hum:ChangeState(Enum.HumanoidStateType.Running)
+            CheatState.godLastHP = maxHP
+        elseif state == Enum.HumanoidStateType.Ragdoll or state == Enum.HumanoidStateType.FallingDown then
+            hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+        end
+    end)
+end
+
+task.spawn(function()
+    while task.wait(0.15) do
+        ProcessGodMode()
+    end
+end)
+
+-- =======================================================
+-- AUTO PARRY & PARRY RADIUS ESP (ИЗ BOLONG HUB)
+-- =======================================================
+local AutoParryState = {
+    Enabled = false, Cooldown = false, COOLDOWN_TIME = 1.0, KillerConns = {},
+    EspPart = nil, EspFolder = nil, DaggerWaitConns = {}, HOLD_TIME = 0.06,
+    MOB_TIMEOUT = 120, CTRL_TIMEOUT = 30, BTN_TIMEOUT = 30, RIGHT_MOUSE = 1,
+    CachedBtn = nil, WaitingForBtn = false, KillerBlacklist = {}, BLACKLIST_DURATION = 2.5
+}
+local parryDaggerName = "Parrying Dagger"
+local killerAnims = {"lungehold", "lungeholdcobra", "attack", "attackfr", "attackcobra", "attacktony"}
+
+local function HasParryDagger()
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    if backpack and backpack:FindFirstChild(parryDaggerName) then return true end
+    local char = LocalPlayer.Character
+    if char and char:FindFirstChild(parryDaggerName) then return true end
+    return false
+end
+
+local function IsAnimationMatching(track)
+    local anim = track.Animation
+    if not anim then return false end
+    local name = anim.Name
+    if name then
+        local lowerName = name:lower():gsub("%s+", "")
+        for _, kName in ipairs(killerAnims) do
+            if lowerName == kName then return true end
+        end
+    end
+    return false
+end
+
+function Hub.IsPlayerInParryRange(killerChar)
+    local myChar = LocalPlayer.Character
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    local killerRoot = killerChar:FindFirstChild("HumanoidRootPart")
+    if not myRoot or not killerRoot then return false end
+    return (killerRoot.Position - myRoot.Position).Magnitude <= CheatState.autoParryRadius
+end
+
+function Hub.IsTargetFacingMe(killerChar)
+    local myChar = LocalPlayer.Character
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    local killerRoot = killerChar:FindFirstChild("HumanoidRootPart")
+    if not myRoot or not killerRoot then return false end
+    local dir = (myRoot.Position - killerRoot.Position).Unit
+    return killerRoot.CFrame.LookVector:Dot(dir) > 0.46
+end
+
+function Hub.GetParryButton()
+    if AutoParryState.CachedBtn and AutoParryState.CachedBtn.Parent and AutoParryState.CachedBtn.Visible then
+        return AutoParryState.CachedBtn
+    end
+    local survivorMob = PlayerGui:FindFirstChild("Survivor-mob")
+    if not survivorMob then return nil end
+    local controls = survivorMob:FindFirstChild("Controls")
+    if not controls then return nil end
+    local btn = controls:FindFirstChild("Gui-mob")
+    if btn and btn:IsA("ImageButton") and btn.Visible then
+        AutoParryState.CachedBtn = btn
+        return btn
+    end
+    return nil
+end
+
+function Hub.TriggerParry()
+    local btn = Hub.GetParryButton()
+    if btn and type(firesignal) == "function" then
+        firesignal(btn.MouseButton1Down)
+        task.delay(AutoParryState.HOLD_TIME, function()
+            if btn and btn.Parent then
+                firesignal(btn.MouseButton1Up)
+                firesignal(btn.MouseButton1Click)
+            end
+        end)
+        return true
+    end
+    VirtualInputManager:SendMouseButtonEvent(0, 0, 1, true, game, 1)
+    task.delay(AutoParryState.HOLD_TIME, function()
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 1, false, game, 1)
+    end)
+    return false
+end
+
+function Hub.ParryAttack(killerHum)
+    if AutoParryState.Cooldown then return end
+    AutoParryState.Cooldown = true
+    if killerHum then AutoParryState.KillerBlacklist[killerHum] = tick() end
+    Hub.TriggerParry()
+    task.delay(AutoParryState.COOLDOWN_TIME, function()
+        AutoParryState.Cooldown = false
+    end)
+end
+
+function Hub.TrackKillerAnimations(player, char)
+    if player == LocalPlayer then return end
+    UpdatePlayerRole(player)
+    if GetPlayerRole(player) ~= "killer" then return end
+    char = char or player.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum or AutoParryState.KillerConns[hum] then return end
+
+    local conn = hum.AnimationPlayed:Connect(function(track)
+        if not CheatState.autoParryEnabled then return end
+        if not IsAnimationMatching(track) then return end
+        if not Hub.IsPlayerInParryRange(char) then return end
+        if not Hub.IsTargetFacingMe(char) then return end
+
+        local lastBl = AutoParryState.KillerBlacklist[hum]
+        if lastBl and (tick() - lastBl) < AutoParryState.BLACKLIST_DURATION then return end
+        Hub.ParryAttack(hum)
+    end)
+    AutoParryState.KillerConns[hum] = conn
+end
+
+function Hub.EnableAutoParry()
+    CheatState.autoParryEnabled = true
+    AutoParryState.Enabled = true
+    for _, p in ipairs(Players:GetPlayers()) do Hub.TrackKillerAnimations(p) end
+end
+
+function Hub.DisableAutoParry()
+    CheatState.autoParryEnabled = false
+    AutoParryState.Enabled = false
+    for _, conn in pairs(AutoParryState.KillerConns) do pcall(function() conn:Disconnect() end) end
+    AutoParryState.KillerConns = {}
+end
+
+function Hub.ClearAutoParryEsp()
+    if AutoParryState.EspFolder then pcall(function() AutoParryState.EspFolder:Destroy() end) AutoParryState.EspFolder = nil end
+    AutoParryState.EspPart = nil
+end
+
+function Hub.DrawAutoParryEsp()
+    Hub.ClearAutoParryEsp()
+    local folder = Instance.new("Folder")
+    folder.Name = "AutoParryRadiusESP"
+    folder.Parent = Workspace
+
+    local centerPart = Instance.new("Part")
+    centerPart.Name = "RadiusESP_Center"
+    centerPart.Anchored = true
+    centerPart.CanCollide = false
+    centerPart.Transparency = 1
+    centerPart.Size = Vector3.new(0.2, 0.2, 0.2)
+    centerPart.Parent = folder
+
+    local pointsCount = 36
+    local radius = CheatState.autoParryRadius
+    local attachments = {}
+
+    for i = 1, pointsCount do
+        local angle = (math.pi * 2 / pointsCount) * i
+        local att = Instance.new("Attachment")
+        att.Position = Vector3.new(math.cos(angle) * radius, -2.5, math.sin(angle) * radius)
+        att.Parent = centerPart
+        attachments[i] = att
+    end
+
+    for i = 1, pointsCount do
+        local nextIdx = (i % pointsCount) + 1
+        local beam = Instance.new("Beam")
+        beam.Attachment0 = attachments[i]
+        beam.Attachment1 = attachments[nextIdx]
+        beam.Width0 = 0.15
+        beam.Width1 = 0.15
+        beam.Color = ColorSequence.new(Color3.fromRGB(255, 60, 60))
+        beam.LightEmission = 1
+        beam.FaceCamera = false
+        beam.Parent = centerPart
+    end
+
+    AutoParryState.EspFolder = folder
+    AutoParryState.EspPart = centerPart
+end
+
+task.spawn(function()
+    while task.wait(0.1) do
+        if CheatState.autoParryRadiusEsp then
+            local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if root and AutoParryState.EspPart and AutoParryState.EspPart.Parent then
+                AutoParryState.EspPart.CFrame = CFrame.new(root.Position)
+            end
+        end
+    end
+end)
+
+-- =======================================================
+-- MOVEMENT MODIFICATION (NO SLOWDOWN & ANTI FALL SLOW)
+-- =======================================================
+local MovementConnections = {antiFall = nil, noSlow = nil}
+
+local function GetModifiedWalkSpeed()
+    if Config.speedBoost then
+        return DefaultWalkSpeed * (1 + math.clamp(Config.boostPercent, 0, 100) / 100)
+    end
+    return DefaultWalkSpeed
+end
+
+local function EnableAntiFall(hum)
+    if MovementConnections.antiFall then MovementConnections.antiFall:Disconnect() end
+    if not hum then return end
+    pcall(function() hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false) end)
+    MovementConnections.antiFall = hum.StateChanged:Connect(function(_, newState)
+        if not Config.antiFallSlow then return end
+        if newState == Enum.HumanoidStateType.Landed or newState == Enum.HumanoidStateType.GettingUp or newState == Enum.HumanoidStateType.FallingDown then
+            pcall(function()
+                hum:ChangeState(Enum.HumanoidStateType.Running)
+                hum.WalkSpeed = GetModifiedWalkSpeed()
+            end)
+        end
+    end)
+end
+
+local function DisableAntiFall(hum)
+    if MovementConnections.antiFall then MovementConnections.antiFall:Disconnect() MovementConnections.antiFall = nil end
+    if hum then pcall(function() hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true) end) end
+end
+
+local function EnableNoSlowdown(hum)
+    if MovementConnections.noSlow then MovementConnections.noSlow:Disconnect() end
+    if not hum or GetPlayerRole(LocalPlayer) == "killer" then return end
+    MovementConnections.noSlow = hum:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+        if not Config.noSlowdown or GetPlayerRole(LocalPlayer) == "killer" then return end
+        local reqSpeed = GetModifiedWalkSpeed()
+        if hum.WalkSpeed < reqSpeed - 0.05 then
+            pcall(function() hum.WalkSpeed = reqSpeed end)
+        end
+    end)
+end
+
+local function DisableNoSlowdown()
+    if MovementConnections.noSlow then MovementConnections.noSlow:Disconnect() MovementConnections.noSlow = nil end
+end
+
+-- =======================================================
+-- GHOST GATE & TELEPORT TO EXIT GATE (ОТ BOLONG HUB)
+-- =======================================================
+function Hub.ApplyGhostGateToObj(gateObj, enable)
+    if not gateObj or not gateObj.Parent then return end
+    local parts = gateObj:IsA("BasePart") and {gateObj} or gateObj:GetDescendants()
+    for _, part in ipairs(parts) do
+        if part:IsA("BasePart") then
+            if enable then
+                if not CheatState.ghostGateBackups[part] then
+                    CheatState.ghostGateBackups[part] = {CanCollide = part.CanCollide, Transparency = part.Transparency}
+                end
+                part.CanCollide = false
+                part.Transparency = 0.6
+            else
+                if CheatState.ghostGateBackups[part] then
+                    part.CanCollide = CheatState.ghostGateBackups[part].CanCollide
+                    part.Transparency = CheatState.ghostGateBackups[part].Transparency
+                end
+            end
+        end
+    end
+end
+
+function Hub.ApplyGhostGate()
+    for _, gate in ipairs(CheatState.cachedMapObjects.Gates) do
+        Hub.ApplyGhostGateToObj(gate, CheatState.ghostGateEnabled)
+    end
+end
+
+function Hub.TeleportToExitGate()
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then
+        BazaUI:MakeNotify({ Title = "Teleport", Description = "Teleport", Content = "Character not found!", Color = Color3.fromRGB(255, 80, 80), Delay = 2 })
+        return
+    end
+    local nearestGatePart = nil
+    local nearestDist = math.huge
+    for _, gate in ipairs(CheatState.cachedMapObjects.Gates) do
+        if gate and gate.Parent then
+            local part = (gate:IsA("Model") and gate.PrimaryPart) or (gate:IsA("BasePart") and gate) or gate:FindFirstChildWhichIsA("BasePart", true)
+            if part then
+                local dist = (part.Position - root.Position).Magnitude
+                if dist < nearestDist then
+                    nearestDist = dist
+                    nearestGatePart = part
+                end
+            end
+        end
+    end
+    if not nearestGatePart then
+        BazaUI:MakeNotify({ Title = "Teleport", Description = "Teleport", Content = "No gates found on map!", Color = Color3.fromRGB(255, 80, 80), Delay = 2 })
+        return
+    end
+
+    local gatePos = nearestGatePart.Position
+    local delta = gatePos - root.Position
+    local deltaHoriz = Vector3.new(delta.X, 0, delta.Z)
+    local dir = (deltaHoriz.Magnitude > 0.1) and deltaHoriz.Unit or nearestGatePart.CFrame.LookVector
+
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Exclude
+    rayParams.FilterDescendantsInstances = {char, nearestGatePart.Parent}
+
+    local targetPos = nil
+    for _, offsetDist in ipairs({15, 20, 25, 10}) do
+        local startRay = gatePos + (dir * offsetDist) + Vector3.new(0, 10, 0)
+        local hit = Workspace:Raycast(startRay, Vector3.new(0, -30, 0), rayParams)
+        if hit then
+            local ceilingHit = Workspace:Raycast(hit.Position + Vector3.new(0, 5, 0), Vector3.new(0, 5, 0), rayParams)
+            if not ceilingHit then
+                targetPos = hit.Position + Vector3.new(0, 3, 0)
+                break
+            end
+        end
+    end
+
+    if targetPos then
+        pcall(function() root.CFrame = CFrame.new(targetPos) end)
+    else
+        pcall(function() root.CFrame = CFrame.new(gatePos + Vector3.new(0, 5, 0)) end)
+    end
+end
+
+-- =======================================================
+-- LOCK FOV, FULLBRIGHT & REMOVE VISUAL EFFECTS
+-- =======================================================
+local function SetFov(fovVal)
+    local cam = Workspace.CurrentCamera
+    if not cam then return end
+    if CheatState.originalFOV == nil then CheatState.originalFOV = cam.FieldOfView end
+    cam.FieldOfView = fovVal
+end
+
+local function ResetFov()
+    local cam = Workspace.CurrentCamera
+    if cam and CheatState.originalFOV then cam.FieldOfView = CheatState.originalFOV end
+    CheatState.originalFOV = nil
+end
+
+local function EnableFullbright()
+    Lighting.Ambient = Color3.fromRGB(178, 178, 178)
+    Lighting.OutdoorAmbient = Color3.fromRGB(178, 178, 178)
+    Lighting.GlobalShadows = false
+    Lighting.FogStart = 9e9
+    Lighting.FogEnd = 9e9
+end
+
+local function DisableFullbright()
+    Lighting.Ambient = Color3.fromRGB(128, 128, 128)
+    Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
+    Lighting.GlobalShadows = true
+    Lighting.FogStart = 0
+    Lighting.FogEnd = 1000
+end
+
+local function RemoveVisualEffects()
+    CheatState.postEffectBackups = {}
+    for _, child in ipairs(Lighting:GetChildren()) do
+        if child:IsA("PostEffect") or child:IsA("Clouds") or child:IsA("Atmosphere") or child:IsA("Sky") then
+            CheatState.postEffectBackups[child] = {Enabled = child.Enabled, Parent = child.Parent}
+            pcall(function()
+                if child:IsA("Sky") then child.Parent = nil else child.Enabled = false end
+            end)
+        end
+    end
+end
+
+local function RestoreVisualEffects()
+    for child, meta in pairs(CheatState.postEffectBackups) do
+        if child then
+            pcall(function()
+                if child:IsA("Sky") then child.Parent = meta.Parent else child.Enabled = meta.Enabled end
+            end)
+        end
+    end
+    CheatState.postEffectBackups = {}
+end
+
+-- =======================================================
+-- FORCE CURSOR & KEYBIND
+-- =======================================================
+local function ForceCursorProperties()
+    pcall(function() UserInputService.MouseIconEnabled = true end)
+    pcall(function() UserInputService.MouseBehavior = Enum.MouseBehavior.Default end)
+end
+
+local function SetForceCursor(enable)
+    Config.forceCursorEnabled = enable
+    if enable then ForceCursorProperties() end
+end
+
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe or UserInputService:GetFocusedTextBox() then return end
+    if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode.Name == Config.forceCursorKeybind then
+        SetForceCursor(not Config.forceCursorEnabled)
+        BazaUI:MakeNotify({ Title = "Cursor", Description = "Keybind", Content = "Force Cursor: " .. (Config.forceCursorEnabled and "ON" or "OFF"), Color = Color3.fromRGB(80, 200, 255), Delay = 1.5 })
+    end
+end)
+
+-- =======================================================
+-- SKIP END SCREEN (BYPASS MATCH END CUTSCENE)
+-- =======================================================
+local function EnableSkipEndScreen()
+    pcall(function()
+        local remotes = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("Game")
+        if remotes then
+            for _, name in ipairs({"cutscene", "cutsceneEnd", "endscreencutscene"}) do
+                local r = remotes:FindFirstChild(name)
+                if r and r:IsA("RemoteEvent") then
+                    for _, conn in ipairs(getconnections(r.OnClientEvent)) do conn:Disable() conn:Disconnect() end
+                end
+            end
+        end
+    end)
+    table.insert(CheatState.skipEndScreenConns, RunService.Heartbeat:Connect(function()
+        if LocalPlayer:GetAttribute("isspectating") then LocalPlayer:SetAttribute("isspectating", false) end
+        if LocalPlayer:GetAttribute("killerend") then LocalPlayer:SetAttribute("killerend", false) end
+    end))
+end
+
+local function DisableSkipEndScreen()
+    for _, conn in ipairs(CheatState.skipEndScreenConns) do pcall(function() conn:Disconnect() end) end
+    CheatState.skipEndScreenConns = {}
+end
+
+-- =======================================================
+-- PLAYER ESP & HIGHLIGHTS
+-- =======================================================
+local function CreateHighlight(obj, color, fillTrans)
+    if not obj or not obj.Parent then return end
+    local highlight = obj:FindFirstChild("BazaHL")
+    if not highlight then
+        highlight = Instance.new("Highlight")
+        highlight.Name = "BazaHL"
+        highlight.Adornee = obj
+        highlight.FillTransparency = fillTrans or 0.6
+        highlight.OutlineTransparency = 0
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        highlight.FillColor = color
+        highlight.OutlineColor = color
+        highlight.Parent = obj
+        return
+    end
+    if highlight.FillColor ~= color then
+        highlight.FillColor = color
+        highlight.OutlineColor = color
+    end
+    highlight.FillTransparency = fillTrans or 0.6
+    highlight.Enabled = true
+end
+
+local function RemoveHighlight(obj)
+    if not obj then return end
+    local hl = obj:FindFirstChild("BazaHL")
+    if hl then pcall(function() hl:Destroy() end) end
+end
+
+local function UpdateOutline(player, character)
+    local hl = CheatState.outlineObjects[player]
+    if not hl then return end
+    local role = GetPlayerRole(player)
+    local isKiller = (role == "killer")
+    local color = isKiller and Config.killerColor or Config.survivorColor
+    local showOutline = isKiller and Config.killerShowOutline or Config.survivorShowOutline
+    local outlineOnly = isKiller and Config.killerOutlineOnly or Config.survivorOutlineOnly
+    local enabled = isKiller and Config.espKiller or Config.espSurvivors
+
+    hl.Adornee = character
+    hl.FillColor = color
+    hl.OutlineColor = color
+    hl.FillTransparency = outlineOnly and 1 or Config.fillTransparency
+    hl.OutlineTransparency = 0
+    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    hl.Enabled = enabled and showOutline
+end
+
+local function AttachEspAdornee(player, character)
+    local espObj = CheatState.espObjects[player]
+    if not espObj or not espObj.billboard then return end
+    local root = character:FindFirstChild("HumanoidRootPart") or character:WaitForChild("HumanoidRootPart", 5)
+    if root then espObj.billboard.Adornee = root end
+    local role = GetPlayerRole(player)
+    local isKiller = (role == "killer")
+    local enabled = isKiller and Config.espKiller or Config.espSurvivors
+    local showName = isKiller and Config.killerShowName or Config.survivorShowName
+
+    espObj.nameLabel.Visible = enabled and showName
+    espObj.nameLabel.Text = player.Name
+end
+
+local function SetupPlayerEsp(player)
+    if player == LocalPlayer then return end
+    UpdatePlayerRole(player)
+    local role = GetPlayerRole(player)
+    local isKiller = (role == "killer")
+
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "BazaESP_BB_" .. player.Name
+    billboard.AlwaysOnTop = true
+    billboard.Size = UDim2.new(0, 150, 0, 18)
+    billboard.StudsOffset = Vector3.new(0, 3.5, 0)
+    billboard.MaxDistance = Config.maxDistance
+    billboard.Parent = EspFolder
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Name = "NameLabel"
+    nameLabel.Size = UDim2.new(1, 0, 0, 18)
+    nameLabel.Position = UDim2.new(0, 0, 0, -10)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    nameLabel.TextStrokeTransparency = 0
+    nameLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+    nameLabel.TextSize = 12
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.Text = player.Name
+    nameLabel.Visible = isKiller and Config.killerShowName or Config.survivorShowName
+    nameLabel.Parent = billboard
+
+    CheatState.espObjects[player] = {billboard = billboard, nameLabel = nameLabel}
+    if player.Character then AttachEspAdornee(player, player.Character) end
+
+    if not CheatState.playerTeamConns[player] then
+        CheatState.playerTeamConns[player] = player:GetPropertyChangedSignal("Team"):Connect(function()
+            UpdatePlayerRole(player)
+            local r = GetPlayerRole(player)
+            local ik = (r == "killer")
+            nameLabel.Visible = ik and Config.killerShowName or Config.survivorShowName
+        end)
+    end
+end
+
+local function SetupPlayerOutline(player)
+    if player == LocalPlayer then return end
+    local hl = Instance.new("Highlight")
+    hl.Name = "BazaPlayerHL_" .. player.Name
+    hl.Parent = EspFolder
+    CheatState.outlineObjects[player] = hl
+    if player.Character then UpdateOutline(player, player.Character) end
+end
+
+local function RemovePlayerEsp(player)
+    if CheatState.espObjects[player] then pcall(function() CheatState.espObjects[player].billboard:Destroy() end) CheatState.espObjects[player] = nil end
+    if CheatState.outlineObjects[player] then pcall(function() CheatState.outlineObjects[player]:Destroy() end) CheatState.outlineObjects[player] = nil end
+    CheatState.playerRoles[player] = nil
+    if CheatState.playerTeamConns[player] then pcall(function() CheatState.playerTeamConns[player]:Disconnect() end) CheatState.playerTeamConns[player] = nil end
+end
+
+local function UpdatePlayerEsp()
+    for player, espObj in pairs(CheatState.espObjects) do
+        if espObj and espObj.billboard and espObj.billboard.Parent then
+            local role = GetPlayerRole(player)
+            local isKiller = (role == "killer")
+            local enabled = isKiller and Config.espKiller or Config.espSurvivors
+            espObj.nameLabel.Visible = enabled and (isKiller and Config.killerShowName or Config.survivorShowName)
+            espObj.billboard.MaxDistance = Config.maxDistance
+        end
+    end
+    for player, hl in pairs(CheatState.outlineObjects) do
+        if hl and hl.Parent and player.Character then UpdateOutline(player, player.Character) end
+    end
+end
+
+local function OnPlayerSetup(player, character)
+    if player == LocalPlayer then return end
+    AttachEspAdornee(player, character)
+    UpdateOutline(player, character)
+    if Config.hitboxEnabled then task.wait(0.3) SetPlayerHitbox(player, character) end
+    if Config.hitboxEspEnabled then SetupHitboxEsp(player, character) end
+end
+
+local function OnPlayerAdded(player)
+    if player == LocalPlayer then return end
+    UpdatePlayerRole(player)
+    SetupPlayerEsp(player)
+    SetupPlayerOutline(player)
+
+    if player.Character then task.spawn(function() OnPlayerSetup(player, player.Character) end) end
+    player.CharacterAdded:Connect(function(character) task.spawn(function() OnPlayerSetup(player, character) end) end)
+end
+
+-- =======================================================
+-- MAP OBJECTS ESP (WORKSPACE.MAP)
+-- =======================================================
+local function UpdateGeneratorEsp(gen)
+    if not gen or not gen.Parent then return true end
+    if CheatState.completedGenerators[gen] then return true end
+
+    local progress = GetAttributeOrValue(gen, "RepairProgress") or GetAttributeOrValue(gen, "Progress") or 0
+    local isCompleted = (progress >= 100) or (GetAttributeOrValue(gen, "Completed") == true) or (GetAttributeOrValue(gen, "IsCompleted") == true) or (GetAttributeOrValue(gen, "Done") == true)
+
+    local billboard = gen:FindFirstChild("BazaGenProgress")
+
+    if isCompleted or not Config.espGeneratorEnabled then
+        if billboard then billboard:Destroy() end
+        RemoveHighlight(gen)
+        gen:SetAttribute("BazaGenLastPct", nil)
+        if isCompleted then CheatState.completedGenerators[gen] = true end
+        return isCompleted
+    end
+
+    CreateHighlight(gen, Config.espGeneratorColor, 0.6)
+
+    if Config.espGeneratorProgressGen then
+        local pct = math.floor(progress + 0.5)
+        local lastPct = gen:GetAttribute("BazaGenLastPct")
+        if lastPct == pct and billboard then return false end
+        gen:SetAttribute("BazaGenLastPct", pct)
+
+        local clampedPct = math.clamp(progress, 0, 100)
+        local color = (clampedPct < 50)
+            and Config.espGeneratorColor:Lerp(Color3.fromRGB(255, 200, 0), clampedPct / 50)
+            or Color3.fromRGB(255, 200, 0):Lerp(Color3.fromRGB(100, 255, 80), (clampedPct - 50) / 50)
+
+        local textStr = string.format("%d%%", pct)
+        local mainPart = gen:FindFirstChild("defaultMaterial", true) or (gen:IsA("Model") and gen.PrimaryPart) or gen:FindFirstChildWhichIsA("BasePart", true)
+
+        if not mainPart then return false end
+
+        if not billboard then
+            billboard = Instance.new("BillboardGui")
+            billboard.Name = "BazaGenProgress"
+            billboard.Adornee = mainPart
+            billboard.AlwaysOnTop = true
+            billboard.LightInfluence = 0
+            billboard.ResetOnSpawn = false
+            billboard.MaxDistance = 260
+            billboard.Size = UDim2.new(0, 160, 0, 36)
+            billboard.StudsOffset = Vector3.new(0, 1.95, 0)
+            billboard.Parent = gen
+
+            local label = Instance.new("TextLabel")
+            label.Name = "Label"
+            label.BackgroundTransparency = 1
+            label.Size = UDim2.fromScale(1, 1)
+            label.Font = Enum.Font.GothamBold
+            label.TextSize = 16
+            label.Text = textStr
+            label.TextColor3 = color
+            label.TextStrokeTransparency = 0
+            label.Parent = billboard
+
+            local stroke = Instance.new("UIStroke")
+            stroke.Thickness = 1.5
+            stroke.Transparency = 0.15
+            stroke.Color = Color3.new(0, 0, 0)
+            stroke.Parent = label
+        else
+            local label = billboard:FindFirstChild("Label")
+            if label then label.Text = textStr label.TextColor3 = color end
+        end
+    else
+        if billboard then billboard:Destroy() gen:SetAttribute("BazaGenLastPct", nil) end
+    end
+    return false
+end
+
+local function MonitorGeneratorProgress(gen)
+    local function update() if not Config.espGeneratorEnabled then return end UpdateGeneratorEsp(gen) end
+    pcall(function()
+        gen:GetAttributeChangedSignal("RepairProgress"):Connect(update)
+        gen:GetAttributeChangedSignal("Progress"):Connect(update)
+        gen:GetAttributeChangedSignal("Completed"):Connect(update)
+        gen:GetAttributeChangedSignal("IsCompleted"):Connect(update)
+    end)
+    gen.ChildAdded:Connect(function(child)
+        if child.Name == "RepairProgress" or child.Name == "Progress" or child.Name == "Completed" or child.Name == "IsCompleted" then
+            if child:IsA("ValueBase") then child.Changed:Connect(update) end
+            update()
+        end
+    end)
+end
+
+local function MonitorPalletState(pallet, meta)
+    local function update()
+        local dropped = GetAttributeOrValue(pallet, "Dropped") or GetAttributeOrValue(pallet, "IsDropped")
+        local broken = GetAttributeOrValue(pallet, "Broken") or GetAttributeOrValue(pallet, "IsBroken") or GetAttributeOrValue(pallet, "Destroyed")
+        if dropped or broken or meta.isFake then
+            RemoveHighlight(pallet)
+            for i, p in ipairs(CheatState.cachedMapObjects.Pallets) do
+                if p == pallet then table.remove(CheatState.cachedMapObjects.Pallets, i) break end
+            end
+            CheatState.cachedPalletMeta[pallet] = nil
+        end
+    end
+    for _, attrName in ipairs({"Dropped", "IsDropped", "Broken", "IsBroken", "Destroyed"}) do
+        pallet:GetAttributeChangedSignal(attrName):Connect(update)
+    end
+end
+
+local function OnMapObjectAdded(obj)
+    local name = obj.Name
+    if name == "Generator" then
+        table.insert(CheatState.cachedMapObjects.Generators, obj)
+        if Config.espGeneratorEnabled then UpdateGeneratorEsp(obj) MonitorGeneratorProgress(obj) end
+    elseif name == "Hook" then
+        table.insert(CheatState.cachedMapObjects.Hooks, obj)
+        local meshParts = {}
+        local model = obj:FindFirstChild("Model")
+        if model then
+            for _, child in ipairs(model:GetDescendants()) do if child:IsA("MeshPart") then table.insert(meshParts, child) end end
+        end
+        CheatState.cachedHookMeshParts[obj] = meshParts
+        if Config.espHookEnabled then
+            if #meshParts > 0 then for _, mp in ipairs(meshParts) do CreateHighlight(mp, Config.espHookColor, 0.6) end
+            else CreateHighlight(obj, Config.espHookColor, 0.6) end
+        end
+    elseif name == "Gate" then
+        table.insert(CheatState.cachedMapObjects.Gates, obj)
+        if Config.espGateEnabled then CreateHighlight(obj, Config.espGateColor, 0.6) end
+        if CheatState.ghostGateEnabled then Hub.ApplyGhostGateToObj(obj, true) end
+    elseif name == "Pallet" or name == "Palletwrong" then
+        table.insert(CheatState.cachedMapObjects.Pallets, obj)
+        local lowerName = name:lower()
+        local part = (obj:IsA("Model") and obj.PrimaryPart) or obj:FindFirstChildWhichIsA("BasePart", true) or (obj:IsA("BasePart") and obj)
+        local isFake = lowerName:find("fake") or lowerName:find("broken") or lowerName:find("destroyed")
+        local meta = {part = part, isFake = isFake and true or false}
+        CheatState.cachedPalletMeta[obj] = meta
+        if Config.espPalletEnabled and not meta.isFake then CreateHighlight(obj, Config.espPalletColor, 0.6) end
+        MonitorPalletState(obj, meta)
+    end
+end
+
+local function OnMapObjectRemoved(obj)
+    local name = obj.Name
+    if name == "Generator" then
+        for i, g in ipairs(CheatState.cachedMapObjects.Generators) do if g == obj then table.remove(CheatState.cachedMapObjects.Generators, i) break end end
+        CheatState.completedGenerators[obj] = nil
+        RemoveHighlight(obj)
+        local bb = obj:FindFirstChild("BazaGenProgress") if bb then bb:Destroy() end
+    elseif name == "Hook" then
+        for i, h in ipairs(CheatState.cachedMapObjects.Hooks) do if h == obj then table.remove(CheatState.cachedMapObjects.Hooks, i) break end end
+        local meshParts = CheatState.cachedHookMeshParts[obj]
+        if meshParts then for _, mp in ipairs(meshParts) do RemoveHighlight(mp) end else RemoveHighlight(obj) end
+        CheatState.cachedHookMeshParts[obj] = nil
+    elseif name == "Gate" then
+        for i, g in ipairs(CheatState.cachedMapObjects.Gates) do if g == obj then table.remove(CheatState.cachedMapObjects.Gates, i) break end end
+        RemoveHighlight(obj)
+    elseif name == "Pallet" or name == "Palletwrong" then
+        for i, p in ipairs(CheatState.cachedMapObjects.Pallets) do if p == obj then table.remove(CheatState.cachedMapObjects.Pallets, i) break end end
+        RemoveHighlight(obj)
+        CheatState.cachedPalletMeta[obj] = nil
+    end
+end
+
+local function ScanMapObjects(mapFolder)
+    if not mapFolder then return end
+    CheatState.cachedMapObjects = {Generators = {}, Pallets = {}, Hooks = {}, Gates = {}}
+    CheatState.cachedPalletMeta = {}
+    CheatState.cachedHookMeshParts = {}
+    CheatState.completedGenerators = {}
+    for _, descendant in ipairs(mapFolder:GetDescendants()) do OnMapObjectAdded(descendant) end
+end
+
+local function InitializeMapEsp(mapFolder)
+    if not mapFolder then return end
+    ScanMapObjects(mapFolder)
+    mapFolder.DescendantAdded:Connect(OnMapObjectAdded)
+    mapFolder.DescendantRemoving:Connect(OnMapObjectRemoved)
+    CheatState.objEspInitialized = true
+end
+
+local mapObj = Workspace:FindFirstChild("Map")
+if mapObj then InitializeMapEsp(mapObj) end
+
+Workspace.ChildAdded:Connect(function(child)
+    if child.Name == "Map" then task.wait(2) InitializeMapEsp(child) end
+end)
+
+Workspace.ChildRemoved:Connect(function(child)
+    if child.Name == "Map" then
+        CheatState.cachedMapObjects = {Generators = {}, Pallets = {}, Hooks = {}, Gates = {}}
+        CheatState.cachedPalletMeta = {}
+        CheatState.cachedHookMeshParts = {}
+        CheatState.completedGenerators = {}
+        CheatState.objEspInitialized = false
+    end
+end)
+
+local function UpdateMapEsp()
+    if not CheatState.objEspInitialized then return end
+    if Config.espGeneratorEnabled then
+        local validGens = {}
+        for _, gen in ipairs(CheatState.cachedMapObjects.Generators) do
+            if gen and gen.Parent then
+                local done = UpdateGeneratorEsp(gen)
+                if not done then table.insert(validGens, gen) end
+            end
+        end
+        CheatState.cachedMapObjects.Generators = validGens
+    else
+        for _, gen in ipairs(CheatState.cachedMapObjects.Generators) do
+            if gen and gen.Parent then
+                RemoveHighlight(gen)
+                local bb = gen:FindFirstChild("BazaGenProgress") if bb then bb:Destroy() end
+                gen:SetAttribute("BazaGenLastPct", nil)
+            end
+        end
+    end
+
+    if Config.espPalletEnabled then
+        for _, pallet in ipairs(CheatState.cachedMapObjects.Pallets) do
+            if pallet and pallet.Parent then
+                local meta = CheatState.cachedPalletMeta[pallet]
+                if meta and not meta.isFake then CreateHighlight(pallet, Config.espPalletColor, 0.6) end
+            end
+        end
+    else
+        for _, pallet in ipairs(CheatState.cachedMapObjects.Pallets) do if pallet then RemoveHighlight(pallet) end end
+    end
+
+    if Config.espHookEnabled then
+        for _, hook in ipairs(CheatState.cachedMapObjects.Hooks) do
+            if hook and hook.Parent then
+                local meshParts = CheatState.cachedHookMeshParts[hook]
+                if meshParts and #meshParts > 0 then for _, mp in ipairs(meshParts) do CreateHighlight(mp, Config.espHookColor, 0.6) end
+                else CreateHighlight(hook, Config.espHookColor, 0.6) end
+            end
+        end
+    else
+        for _, hook in ipairs(CheatState.cachedMapObjects.Hooks) do
+            if hook and hook.Parent then
+                local meshParts = CheatState.cachedHookMeshParts[hook]
+                if meshParts then for _, mp in ipairs(meshParts) do RemoveHighlight(mp) end else RemoveHighlight(hook) end
+            end
+        end
+    end
+
+    if Config.espGateEnabled then
+        for _, gate in ipairs(CheatState.cachedMapObjects.Gates) do if gate and gate.Parent then CreateHighlight(gate, Config.espGateColor, 0.6) end end
+    else
+        for _, gate in ipairs(CheatState.cachedMapObjects.Gates) do if gate and gate.Parent then RemoveHighlight(gate) end end
+    end
+end
+
+-- =======================================================
+-- HITBOXES & HITBOX ESP
+-- =======================================================
+local function SetPlayerHitbox(player, character)
+    if not Config.hitboxEnabled then return end
+    local parts = GetCharacterParts(character)
+    local role = GetPlayerRole(player)
+    local sizeMultiplier = (role == "killer") and Config.killerHitboxSize or Config.survivorHitboxSize
+    local multiplier = sizeMultiplier / 100
+
+    for _, part in ipairs(parts) do
+        if not CheatState.hitboxOriginalSizes[part] then CheatState.hitboxOriginalSizes[part] = part.Size end
+        pcall(function() part.Size = CheatState.hitboxOriginalSizes[part] * multiplier end)
+    end
+end
+
+local function ResetPlayerHitbox(player, character)
+    if not character then return end
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            local orig = CheatState.hitboxOriginalSizes[part]
+            if orig then pcall(function() part.Size = orig end) CheatState.hitboxOriginalSizes[part] = nil end
+        end
+    end
+end
+
+local function SetAllHitboxes()
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            if Config.hitboxEnabled then SetPlayerHitbox(player, player.Character) else ResetPlayerHitbox(player, player.Character) end
+        end
+    end
+end
+
+local function SetupHitboxEsp(player, character)
+    if player == LocalPlayer then return end
+    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return end
+    local role = GetPlayerRole(player)
+    local color = (role == "killer") and Config.hitboxEspKillerColor or Config.hitboxEspSurvivorColor
+
+    local box = CheatState.hitboxEspObjects[player]
+    if not box or not box.Parent then
+        box = Instance.new("SelectionBox")
+        box.Name = "BazaHitboxBox"
+        box.Adornee = rootPart
+        box.LineThickness = 0.05
+        box.Parent = EspFolder
+        CheatState.hitboxEspObjects[player] = box
+    end
+    box.Color3 = color
+    box.SurfaceColor3 = color
+    box.SurfaceTransparency = Config.hitboxEspOutlineOnly and 1 or Config.hitboxEspTransparency
+end
+
+local function RemoveHitboxEsp(player)
+    local box = CheatState.hitboxEspObjects[player]
+    if box then pcall(function() box:Destroy() end) CheatState.hitboxEspObjects[player] = nil end
+end
+
+-- =======================================================
+-- KILLER PROXIMITY WARNING
+-- =======================================================
+local function CheckKillerProximity()
+    if not Config.warnEnabled then return end
+    local myChar = LocalPlayer.Character
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return end
+
+    local nearestDist = math.huge
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and GetPlayerRole(player) == "killer" then
+            local char = player.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            if root then
+                local dist = (root.Position - myRoot.Position).Magnitude
+                if dist < nearestDist then nearestDist = dist end
+            end
+        end
+    end
+
+    if nearestDist <= Config.warnDist3 and CheatState.lastWarnLevel ~= 3 then
+        CheatState.lastWarnLevel = 3
+        BazaUI:MakeNotify({ Title = "KILLER NEARBY", Description = "WARNING", Content = "KILLER VERY CLOSE! (" .. math.floor(nearestDist) .. "m)", Color = Color3.fromRGB(255, 30, 30), Delay = 3 })
+    elseif nearestDist <= Config.warnDist2 and nearestDist > Config.warnDist3 and CheatState.lastWarnLevel ~= 2 then
+        CheatState.lastWarnLevel = 2
+        BazaUI:MakeNotify({ Title = "KILLER APPROACHING", Description = "WARNING", Content = "Killer approaching (" .. math.floor(nearestDist) .. "m)", Color = Color3.fromRGB(255, 150, 0), Delay = 3 })
+    elseif nearestDist <= Config.warnDist1 and nearestDist > Config.warnDist2 and CheatState.lastWarnLevel ~= 1 then
+        CheatState.lastWarnLevel = 1
+        BazaUI:MakeNotify({ Title = "KILLER SPOTTED", Description = "WARNING", Content = "Killer spotted (" .. math.floor(nearestDist) .. "m)", Color = Color3.fromRGB(255, 220, 0), Delay = 3 })
+    elseif nearestDist > Config.warnDist1 then
+        CheatState.lastWarnLevel = 0
+    end
+end
+
+-- =======================================================
+-- AUTO GENERATOR SKILLCHECK
+-- =======================================================
+local nilValue_1 = nil
+local function GetSkillCheckObjects()
+    for _, guiName in ipairs({"SkillCheckPromptGui", "SkillCheckPromptGui-con"}) do
+        local gui = PlayerGui:FindFirstChild(guiName, true)
+        if gui then
+            local check = gui:FindFirstChild("Check", true)
+            if check and check.Visible then
+                return check:FindFirstChild("Line", true), check:FindFirstChild("Goal", true)
+            end
+        end
+    end
+    return nil, nil
+end
+
+local function GetActionButton()
+    if nilValue_1 and nilValue_1.Parent then return nilValue_1 end
+    local survivorMob = PlayerGui:FindFirstChild("Survivor-mob", true)
+    if not survivorMob then return nil end
+    local controls = survivorMob:FindFirstChild("Controls", true)
+    if not controls then return nil end
+    local action = controls:FindFirstChild("action") or controls:FindFirstChild("Gui-mob")
+    if action and action:IsA("GuiButton") then nilValue_1 = action return action end
+    return nil
+end
+
+local function TriggerSkillCheckHit()
+    local button = GetActionButton()
+    if button and type(firesignal) == "function" then
+        firesignal(button.MouseButton1Down)
+        task.delay(0.05, function()
+            if button and button.Parent then
+                firesignal(button.MouseButton1Up)
+                firesignal(button.MouseButton1Click)
+            end
+        end)
+        return
+    end
+    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+    task.wait()
+    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+end
+
+local instantLastVisible = false
+local lastGoalRot = nil
+local lastPressTime = 0
+
+local function HandleAutoGenerators()
+    if not Config.autoGenerator then return end
+    local lineObject, goalObject = GetSkillCheckObjects()
+    if not lineObject or not goalObject then
+        instantLastVisible = false
+        lastGoalRot = nil
+        return
+    end
+
+    local goalRotation = goalObject.Rotation
+    local lineRotation = lineObject.Rotation
+    local currentTime = tick()
+
+    if Config.autoGeneratorMode == "Instant" then
+        local instantRotation = goalRotation + 109
+        lineObject.Rotation = instantRotation
+        if not instantLastVisible or goalRotation ~= lastGoalRot then
+            if currentTime - lastPressTime > 0.05 then
+                lastGoalRot = goalRotation
+                instantLastVisible = true
+                lastPressTime = currentTime
+                TriggerSkillCheckHit()
+            end
+        end
+    elseif Config.autoGeneratorMode == "Perfect" then
+        local diff = (lineRotation - goalRotation) % 360
+        if currentTime - lastPressTime > 0.15 then
+            if diff >= 102 and diff <= 109 then
+                lastPressTime = currentTime
+                TriggerSkillCheckHit()
+            end
+        end
+    else
+        local diff = (lineRotation - goalRotation) % 360
+        if currentTime - lastPressTime > 0.15 then
+            if diff >= 125 and diff <= 140 then
+                lastPressTime = currentTime
+                TriggerSkillCheckHit()
+            end
+        end
+    end
+end
+
+-- =======================================================
+-- СОЗДАНИЕ ГЛАВНОГО ОКНА UI
+-- =======================================================
+local Window = BazaUI:Window({
+    Title = "Violence District",
+    Color = Color3.fromRGB(255, 85, 85),
+    Image = "84034353458936",
+    Version = 1,
+    Search = true,
+    Author = nil,
+    Footer = "Baza Hub | by baza2000ultrapro",
+    Telegram = "https://t.me/BazaScript",
+    TabWidth = 135,
+})
+
+-- =======================================================
+-- 1. Вкладка: Survivors (Выжившие)
+-- =======================================================
+local SurvivorTab = Window:AddTab({ Name = "Survivors", Icon = "user" })
+
+local GenSection = SurvivorTab:AddSection("Auto Fix Generator", false)
+GenSection:AddToggle({
+    Title = "Auto Repair Generator",
+    Content = "Automatically hits skill checks for generators",
+    Default = true,
+    Save = true,
+    Callback = function(val) Config.autoGenerator = val end
+})
+
+GenSection:AddDropdown({
+    Title = "Repair Mode",
+    Content = "Select automatic skill check mode",
+    Options = {"Instant", "Perfect", "Normal"},
+    Default = "Instant",
+    Save = true,
+    Callback = function(val) Config.autoGeneratorMode = val end
+})
+
+local GodSection = SurvivorTab:AddSection("God Mode", false)
+GodSection:AddToggle({
+    Title = "God Mode",
+    Content = "+ Anti Knock/Down\n- Stand up if knocked down\n- Visual heal",
+    Default = false,
+    Save = true,
+    Callback = function(val)
+        if val then EnableGodMode() else DisableGodMode() end
+    end
+})
+
+local ParrySection = SurvivorTab:AddSection("Auto Parry", false)
+ParrySection:AddToggle({
+    Title = "Auto Parry",
+    Content = "Automatically parries killer attacks in range",
+    Default = false,
+    Save = true,
+    Callback = function(val)
+        if val then Hub.EnableAutoParry() else Hub.DisableAutoParry() end
+    end
+})
+
+ParrySection:AddToggle({
+    Title = "Parry Radius ESP",
+    Content = "Draws red circle around character for parry range",
+    Default = false,
+    Save = true,
+    Callback = function(val)
+        CheatState.autoParryRadiusEsp = val
+        if val then Hub.EnableAutoParryEsp() else Hub.DisableAutoParryEsp() end
+    end
+})
+
+ParrySection:AddSlider({
+    Title = "Parry Radius (Studs)",
+    Content = "Distance threshold for auto parry trigger",
+    Min = 4,
+    Max = 40,
+    Default = 12,
+    Increment = 1,
+    Live = true,
+    Save = true,
+    Callback = function(val)
+        CheatState.autoParryRadius = val
+        if CheatState.autoParryRadiusEsp then Hub.DrawAutoParryEsp() end
+    end
+})
+
+local EscapeSection = SurvivorTab:AddSection("Exit Gate & Escape", false)
+EscapeSection:AddButton({
+    Title = "TP to Exit Gate",
+    Content = "Teleports character near the exit gate on ground level",
+    Callback = function()
+        Hub.TeleportToExitGate()
+    end
+})
+
+EscapeSection:AddToggle({
+    Title = "Ghost Gate (Legit Mode)",
+    Content = "Pass through exit gate doors without opening",
+    Default = false,
+    Save = true,
+    Callback = function(val)
+        CheatState.ghostGateEnabled = val
+        Hub.ApplyGhostGate()
+    end
+})
+
+-- =======================================================
+-- 2. Вкладка: Killers (Убийцы)
+-- =======================================================
+local KillerTab = Window:AddTab({ Name = "Killers", Icon = "sword" })
+
+local CombatSection = KillerTab:AddSection("Hitbox & Combat", false)
+CombatSection:AddToggle({
+    Title = "Enable Hitbox Modifier",
+    Content = "Expands character hitboxes for targets",
+    Default = false,
+    Save = true,
+    Callback = function(val)
+        Config.hitboxEnabled = val
+        SetAllHitboxes()
+    end
+})
+
+CombatSection:AddSlider({
+    Title = "Survivor Hitbox Size (%)",
+    Content = "Hitbox size multiplier for survivors",
+    Min = 100,
+    Max = 300,
+    Default = 100,
+    Increment = 10,
+    Live = true,
+    Save = true,
+    Callback = function(val)
+        Config.survivorHitboxSize = val
+        if Config.hitboxEnabled then SetAllHitboxes() end
+    end
+})
+
+-- =======================================================
+-- 3. Вкладка: Visuals (ESP)
+-- =======================================================
+local VisualsTab = Window:AddTab({ Name = "Visuals (ESP)", Icon = "eye" })
+
+local PlayerEspSec = VisualsTab:AddSection("Player ESP & Highlights", false)
+PlayerEspSec:AddToggle({
+    Title = "ESP Survivors",
+    Content = "Highlight survivor players",
+    Default = true,
+    Save = true,
+    Callback = function(val)
+        Config.espSurvivors = val
+        UpdatePlayerEsp()
+    end
+})
+
+PlayerEspSec:AddColorPicker({
+    Title = "Survivor ESP Color",
+    Content = "Select highlight color for survivors",
+    Default = Color3.fromRGB(60, 200, 255),
+    Save = true,
+    Callback = function(col)
+        Config.survivorColor = col
+        UpdatePlayerEsp()
+    end
+})
+
+PlayerEspSec:AddToggle({
+    Title = "ESP Killer",
+    Content = "Highlight killer player",
+    Default = true,
+    Save = true,
+    Callback = function(val)
+        Config.espKiller = val
+        UpdatePlayerEsp()
+    end
+})
+
+PlayerEspSec:AddColorPicker({
+    Title = "Killer ESP Color",
+    Content = "Select highlight color for killer",
+    Default = Color3.fromRGB(255, 60, 60),
+    Save = true,
+    Callback = function(col)
+        Config.killerColor = col
+        UpdatePlayerEsp()
+    end
+})
+
+local MapEspSec = VisualsTab:AddSection("Map Objects ESP", false)
+MapEspSec:AddToggle({
+    Title = "ESP Generators",
+    Content = "Highlight generators on map",
+    Default = false,
+    Save = true,
+    Callback = function(val)
+        Config.espGeneratorEnabled = val
+        UpdateMapEsp()
+    end
+})
+
+MapEspSec:AddToggle({
+    Title = "ESP Pallets",
+    Content = "Highlight valid map pallets",
+    Default = false,
+    Save = true,
+    Callback = function(val)
+        Config.espPalletEnabled = val
+        UpdateMapEsp()
+    end
+})
+
+MapEspSec:AddToggle({
+    Title = "ESP Hooks",
+    Content = "Highlight meat hooks",
+    Default = false,
+    Save = true,
+    Callback = function(val)
+        Config.espHookEnabled = val
+        UpdateMapEsp()
+    end
+})
+
+MapEspSec:AddToggle({
+    Title = "ESP Gates",
+    Content = "Highlight exit gates",
+    Default = false,
+    Save = true,
+    Callback = function(val)
+        Config.espGateEnabled = val
+        UpdateMapEsp()
+    end
+})
+
+-- =======================================================
+-- 4. Вкладка: Misc (Разное)
+-- =======================================================
+local MiscTab = Window:AddTab({ Name = "Misc", Icon = "cherry" })
+
+local MoveSection = MiscTab:AddSection("Movement Modification", false)
+MoveSection:AddToggle({
+    Title = "No Slowdown",
+    Content = "WalkSpeed will not drop below normal speed",
+    Default = false,
+    Save = true,
+    Callback = function(val)
+        Config.noSlowdown = val
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if val then EnableNoSlowdown(hum) else DisableNoSlowdown() end
+    end
+})
+
+MoveSection:AddToggle({
+    Title = "Anti Fall Slow",
+    Content = "Prevents character slowdown when landing from heights",
+    Default = false,
+    Save = true,
+    Callback = function(val)
+        Config.antiFallSlow = val
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if val then EnableAntiFall(hum) else DisableAntiFall(hum) end
+    end
+})
+
+MoveSection:AddToggle({
+    Title = "Speed Boost",
+    Content = "Increases normal movement speed",
+    Default = false,
+    Save = true,
+    Callback = function(val)
+        Config.speedBoost = val
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then hum.WalkSpeed = val and GetModifiedWalkSpeed() or DefaultWalkSpeed end
+    end
+})
+
+MoveSection:AddSlider({
+    Title = "Boost Amount (%)",
+    Content = "Additional speed percentage",
+    Min = 0,
+    Max = 100,
+    Default = 50,
+    Increment = 5,
+    Live = true,
+    Save = true,
+    Callback = function(val) Config.boostPercent = val end
+})
+
+local CamSection = MiscTab:AddSection("Lock FOV & Lighting", false)
+CamSection:AddToggle({
+    Title = "Lock FOV",
+    Content = "Locks camera field of view to set value",
+    Default = false,
+    Save = true,
+    Callback = function(val)
+        Config.lockFovEnabled = val
+        if val then SetFov(Config.customFovValue) else ResetFov() end
+    end
+})
+
+CamSection:AddSlider({
+    Title = "FOV Value",
+    Content = "Set custom camera FOV",
+    Min = 30,
+    Max = 120,
+    Default = 70,
+    Increment = 1,
+    Live = true,
+    Save = true,
+    Callback = function(val)
+        Config.customFovValue = val
+        if Config.lockFovEnabled then SetFov(val) end
+    end
+})
+
+CamSection:AddToggle({
+    Title = "Fullbright",
+    Content = "Removes map darkness and shadows",
+    Default = false,
+    Save = true,
+    Callback = function(val)
+        Config.fullbrightEnabled = val
+        if val then EnableFullbright() else DisableFullbright() end
+    end
+})
+
+CamSection:AddToggle({
+    Title = "Remove Visual Effects",
+    Content = "Boost FPS by disabling sky, clouds, and atmosphere effects",
+    Default = false,
+    Save = true,
+    Callback = function(val)
+        Config.removeVfxEnabled = val
+        if val then RemoveVisualEffects() else RestoreVisualEffects() end
+    end
+})
+
+local CursorSection = MiscTab:AddSection("Cursor Features", false)
+CursorSection:AddToggle({
+    Title = "Enable Force Cursor",
+    Content = "Forces mouse cursor to stay visible",
+    Default = false,
+    Save = true,
+    Callback = function(val) SetForceCursor(val) end
+})
+
+CursorSection:AddKeybind({
+    Title = "Custom Cursor Keybind",
+    Content = "Press keybind to toggle Force Cursor",
+    Default = Enum.KeyCode.G,
+    Callback = function(key)
+        Config.forceCursorKeybind = key.Name
+        BazaUI:MakeNotify({ Title = "Cursor Keybind", Description = "Keybind", Content = "Keybind set to: " .. Config.forceCursorKeybind, Color = Color3.fromRGB(80, 200, 255), Delay = 1.5 })
+    end
+})
+
+local EndSection = MiscTab:AddSection("Skip End Screen", false)
+EndSection:AddToggle({
+    Title = "Skip End Screen",
+    Content = "Bypass match ending cutscene",
+    Default = false,
+    Save = true,
+    Callback = function(val)
+        Config.skipEndScreenEnabled = val
+        if val then EnableSkipEndScreen() else DisableSkipEndScreen() end
+    end
+})
+
+-- =======================================================
+-- 5. Вкладка: Settings (Настройки)
+-- =======================================================
+local SettingsTab = Window:AddTab({ Name = "Settings", Icon = "settings" })
+local ConfigSec = SettingsTab:AddSection("Config Manager", false)
+ConfigSec:AddConfig()
+
+-- =======================================================
+-- 6. Вкладка: Information (Информация)
+-- =======================================================
+Window:InfoTab({
+    Name = "Information",
+    Icon = "info",
+    SectionTitle = "Hub Information & Socials",
+    Version = "v1.0",
+    TelegramName = "Baza Script Channel",
+    TelegramLink = "https://t.me/BazaScript",
+    TelegramText = "Official Telegram channel for Violence District updates, news and scripts.",
+    ButtonText = "Copy Telegram Link",
+    Cards = {
+        {
+            Title = "Violence District Hub v1.0",
+            Description = "Author: baza2000ultrapro\nTarget Game: Violence District (Roblox Survivor vs Killer)\nFully ported & optimized from Bolong Hub.",
+            Logo = "info",
+        }
+    }
+})
+
+-- =======================================================
+-- ИНИЦИАЛИЗАЦИЯ ИГРОКОВ И ИГРОВЫЕ ЦИКЛЫ ROBLOX
+-- =======================================================
+Players.PlayerAdded:Connect(OnPlayerAdded)
+Players.PlayerRemoving:Connect(function(player)
+    RemovePlayerEsp(player)
+    RemoveHitboxEsp(player)
+    if player.Character then ResetPlayerHitbox(player, player.Character) end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    if CheatState.godEnabled then task.wait(0.3) EnableGodMode() end
+    local hum = char:WaitForChild("Humanoid", 5)
+    if hum then
+        if Config.antiFallSlow then EnableAntiFall(hum) end
+        if Config.noSlowdown then EnableNoSlowdown(hum) end
+    end
+end)
+
+for _, p in ipairs(Players:GetPlayers()) do
+    if p ~= LocalPlayer then OnPlayerAdded(p) end
+end
+
+RunService.Stepped:Connect(function()
+    local char = LocalPlayer.Character
+    if not char then return end
+
+    if Config.fovToggle or Config.lockFovEnabled then Camera.FieldOfView = Config.customFovValue end
+    HandleAutoGenerators()
+end)
+
+RunService.RenderStepped:Connect(function()
+    if Config.hitboxEspEnabled then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then SetupHitboxEsp(player, player.Character) end
+        end
+    else
+        for player in pairs(CheatState.hitboxEspObjects) do RemoveHitboxEsp(player) end
+    end
+
+    CheckKillerProximity()
+end)
+
+BazaUI:MakeNotify({ Title = "Baza Hub", Description = "Violence District", Content = "Violence District Baza Hub loaded successfully!", Color = Color3.fromRGB(255, 85, 85), Delay = 5 })
